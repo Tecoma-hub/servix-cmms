@@ -1,3 +1,4 @@
+// frontend/src/components/auth/Login.js
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -21,8 +22,15 @@ const Login = ({ login }) => {
     setError('');
 
     try {
-      const res = await axios.post('/auth/login', { email, password });
-      login(res.data);
+      // POST request to login endpoint
+      const res = await axios.post('/auth/login', formData);
+      
+      // Call login function with response data
+      if (login && typeof login === 'function') {
+        login(res.data);
+      }
+      
+      // Redirect to dashboard
       navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed');
@@ -42,7 +50,7 @@ const Login = ({ login }) => {
             </svg>
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Servix CMMS</h1>
-          <p className="text-gray-600">Hospital Maintenance Management System</p>
+          <p className="text-gray-600">Sign in to your account</p>
         </div>
 
         {error && (
@@ -81,7 +89,7 @@ const Login = ({ login }) => {
             disabled={loading}
             className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700 transition-colors disabled:opacity-50"
           >
-            {loading ? 'Signing In...' : 'Sign In'}
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
           <div className="text-center">
             <button

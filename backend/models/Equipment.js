@@ -1,110 +1,119 @@
+// backend/models/Equipment.js
 const mongoose = require('mongoose');
+
+const statusHistorySchema = new mongoose.Schema({
+  status: {
+    type: String,
+    required: true,
+    enum: ['Serviceable', 'Unserviceable', 'Decommissioned', 'Auctioned']
+  },
+  changedBy: {
+    type: mongoose.Schema.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  changedAt: {
+    type: Date,
+    default: Date.now
+  },
+  notes: {
+    type: String,
+    trim: true
+  }
+});
 
 const equipmentSchema = new mongoose.Schema({
   name: {
     type: String,
-    required: [true, 'Equipment name is required'],
+    required: [true, 'Please add a name'],
     trim: true,
-    maxlength: [100, 'Name cannot exceed 100 characters']
+    maxlength: [50, 'Name cannot be more than 50 characters']
   },
   brand: {
     type: String,
-    required: [true, 'Brand is required'],
-    trim: true
+    required: [true, 'Please add a brand'],
+    trim: true,
+    maxlength: [50, 'Brand cannot be more than 50 characters']
   },
   model: {
     type: String,
-    required: [true, 'Model is required'],
-    trim: true
+    required: [true, 'Please add a model'],
+    trim: true,
+    maxlength: [50, 'Model cannot be more than 50 characters']
   },
   serialNumber: {
     type: String,
-    required: [true, 'Serial number is required'],
+    required: [true, 'Please add a serial number'],
     unique: true,
     trim: true
-  },
-  hospitalId: {
-    type: String,
-    required: [true, 'Hospital ID is required'],
-    unique: true,
-    trim: true
-  },
-  status: {
-    type: String,
-    enum: ['Active', 'Under Maintenance', 'Decommissioned'],
-    default: 'Active'
-  },
-  sparePartsNeeded: [{
-    type: String,
-    trim: true
-  }],
-  comments: {
-    type: String,
-    default: ''
   },
   department: {
     type: String,
-    required: [true, 'Department is required'],
-    enum: ['ICU', 'Radiology', 'Laboratory', 'Physiotherapy', 'Emergency', 'Surgery', 'Pharmacy', 'Administration']
+    required: [true, 'Please add a department'],
+    enum: [
+      'TSEU', 'MEU', 'PEU', 'DEPARTMENT OF ANATOMICAL PATHOLOGY', 'IT OFFICE', 'SIMANGO',
+      'ANAESTHESIA CLINIC', 'HAEMATOLOGY DAYCARE CLINIC', 'TAMAKLO', 'ANOFF', 'CTU', 'ICU',
+      'DIALYSIS', 'MAIN THEATRE', 'CSSD', 'DESPITE', 'ALLIED SURGERY', 'EASMON', 'NEURO SURGERY',
+      'YEBUAH WARD', 'YAA ASANTEWAA', 'JAMES COLE', 'BANDOH', 'GHANDI', 'OPOKU', 'GEU',
+      'DEBRAH WARD', 'BLOOD BANK', 'MOPD', 'SOPD', 'POPD', 'FOPD', 'DENTAL', 'PUBLIC HEALTH',
+      'POLYCLINIC', 'ENT', 'OPTHAMOLOGY', 'PATHOLOGY DEPARTMENT (LAB)', 'RADIOLOGY DEPARTMENT',
+      'PHYSIOTHERAPY', '37 CHEMIST', 'MSED', 'DIETETICS DEPARTMENT', 'BIRTH AND DEATH', 'LAUNDRY',
+      'BMED', 'PHARMACY DIVISION', 'MATERNITY THEATRE', 'NICU', 'LABOUR', 'MILITARY POLYCLINIC',
+      'OXYGEN PLANT'
+    ]
   },
-  critical: {
-    type: Boolean,
-    default: false
+  status: {
+    type: String,
+    required: [true, 'Please add a status'],
+    enum: ['Serviceable', 'Unserviceable', 'Decommissioned', 'Auctioned'],
+    default: 'Serviceable'
+  },
+  location: {
+    type: String,
+    required: [true, 'Please add a location'],
+    trim: true
+  },
+  purchaseDate: {
+    type: Date,
+    required: [true, 'Please add a purchase date']
+  },
+  warrantyExpiry: {
+    type: Date
   },
   lastMaintenance: {
     type: Date
   },
   nextMaintenance: {
-    type: Date,
-    required: [true, 'Next maintenance date is required']
-  },
-  maintenanceSchedule: {
-    type: String,
-    enum: ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Biannually', 'Annually'],
-    default: 'Monthly'
-  },
-  maintenanceType: {
-    type: String,
-    enum: ['Time-based', 'Usage-based'],
-    default: 'Time-based'
-  },
-  usageHours: {
-    type: Number,
-    default: 0
-  },
-  maxUsageHours: {
-    type: Number,
-    default: 0
-  },
-  qrCode: {
-    type: String,
-    default: ''
-  },
-  location: {
-    type: String,
-    default: ''
-  },
-  purchaseDate: {
     type: Date
   },
-  warrantyExpiry: {
-    type: Date
-  },
-  documents: [{
-    name: String,
-    url: String,
-    uploadedAt: {
-      type: Date,
-      default: Date.now
+  maintenanceHistory: [
+    {
+      date: {
+        type: Date,
+        default: Date.now
+      },
+      description: String,
+      technician: String,
+      cost: Number
     }
-  }]
-}, {
-  timestamps: true
+  ],
+  statusHistory: [statusHistorySchema],
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
 });
 
-// Index for faster searches
-equipmentSchema.index({ name: 'text', brand: 'text', model: 'text', serialNumber: 'text', hospitalId: 'text' });
-equipmentSchema.index({ department: 1, status: 1 });
-equipmentSchema.index({ nextMaintenance: 1 });
+// Update status and add to history when status changes
+equipmentSchema.pre('save', function(next) {
+  if (this.isModified('status') && this.status !== this.get('status')) {
+    this.statusHistory.push({
+      status: this.status,
+      changedBy: this.changedBy || this.createdBy,
+      notes: this.statusChangeNotes
+    });
+  }
+  next();
+});
 
 module.exports = mongoose.model('Equipment', equipmentSchema);

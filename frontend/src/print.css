@@ -1,0 +1,80 @@
+/* Print styles for equipment reports */
+@media print {
+  /* Hide non-print elements */
+  .no-print, 
+  .hidden-print, 
+  .flex > button, 
+  .mb-6 > div > input,
+  .mb-6 > div > select {
+    display: none !important;
+  }
+  
+  /* Ensure full width for print */
+  .print-container, .container, .bg-white, table {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  
+  /* Style for print */
+  body {
+    background: white !important;
+    font-family: Arial, sans-serif;
+  }
+  
+  table {
+    width: 100% !important;
+    border-collapse: collapse;
+    margin: 0;
+    padding: 0;
+  }
+  
+  th, td {
+    border: 1px solid #000 !important;
+    padding: 8px !important;
+    font-size: 12px !important;
+    text-align: left;
+  }
+  
+  th {
+    background-color: #f3f4f6 !important;
+    font-weight: bold;
+  }
+  
+  /* Header styling */
+  h1, h2, h3 {
+    color: #1f2937 !important;
+    page-break-after: avoid;
+  }
+  
+  /* Ensure content stays together */
+  tr {
+    page-break-inside: avoid;
+  }
+  
+  /* Footer */
+  @page {
+    margin: 0.5in;
+    size: letter;
+  }
+  
+  /* Add page breaks for better printing */
+  .page-break {
+    page-break-before: always;
+  }
+}
+
+/* Print-only elements */
+.print-only {
+  display: none !important;
+}
+
+/* Show elements only when printing */
+@media print {
+  .print-only {
+    display: block !important;
+  }
+}

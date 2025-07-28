@@ -1,3 +1,4 @@
+// backend/controllers/authController.js
 const User = require('../models/User');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../middleware/async');
@@ -8,6 +9,12 @@ const jwt = require('jsonwebtoken');
 // @access  Public
 exports.register = asyncHandler(async (req, res, next) => {
   const { name, email, password, role } = req.body;
+
+  // Check if user already exists
+  const existingUser = await User.findOne({ email });
+  if (existingUser) {
+    return next(new ErrorResponse('Email already exists', 400));
+  }
 
   // Create user
   const user = await User.create({
@@ -65,7 +72,7 @@ exports.getMe = asyncHandler(async (req, res, next) => {
 
   res.status(200).json({
     success: true,
-    data: user
+     user
   });
 });
 
@@ -76,12 +83,9 @@ const sendTokenResponse = (user, statusCode, res) => {
 
   const options = {
     expires: new Date(Date.now() + process.env.JWT_COOKIE_EXPIRE * 24 * 60 * 60 * 1000),
-    httpOnly: true
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production'
   };
-
-  if (process.env.NODE_ENV === 'production') {
-    options.secure = true;
-  }
 
   res
     .status(statusCode)

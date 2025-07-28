@@ -1,9 +1,10 @@
+// frontend/src/components/auth/Register.js
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom'; // Import useNavigate
 import axios from 'axios';
 
 const Register = ({ login }) => {
-  const navigate = useNavigate();
+  const navigate = useNavigate(); // Initialize navigate
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -23,8 +24,15 @@ const Register = ({ login }) => {
     setError('');
 
     try {
+      // POST request to register endpoint
       const res = await axios.post('/auth/register', formData);
-      login(res.data);
+      
+      // Call login function with response data
+      if (login && typeof login === 'function') {
+        login(res.data);
+      }
+      
+      // Redirect to dashboard
       navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Registration failed');
@@ -112,7 +120,7 @@ const Register = ({ login }) => {
           <div className="text-center">
             <button
               type="button"
-              onClick={() => navigate('/login')}
+              onClick={() => navigate('/login')} // This will now work
               className="text-teal-600 hover:text-teal-700 text-sm font-medium"
             >
               Already have an account? Sign In

@@ -1,26 +1,24 @@
+// backend/routes/tasks.js
 const express = require('express');
 const { protect, authorize } = require('../middleware/auth');
 const {
   getTasks,
-  getSingleTask,
   createTask,
+  getTaskById,
   updateTask,
   deleteTask
 } = require('../controllers/taskController');
 
 const router = express.Router();
 
-router.use(protect);
+// Define routes
+router.route('/')
+  .get(protect, getTasks)
+  .post(protect, authorize('Engineer'), createTask);
 
-router
-  .route('/')
-  .get(getTasks)
-  .post(authorize('Engineer'), createTask);
-
-router
-  .route('/:id')
-  .get(getSingleTask)
-  .put(authorize('Engineer'), updateTask)
-  .delete(authorize('Engineer'), deleteTask);
+router.route('/:id')
+  .get(protect, getTaskById)
+  .put(protect, authorize('Engineer'), updateTask)
+  .delete(protect, authorize('Engineer'), deleteTask);
 
 module.exports = router;

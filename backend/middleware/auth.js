@@ -1,21 +1,26 @@
-const jwt = require('jsonwebtoken');
-const asyncHandler = require('express-async-handler');
-const User = require('../models/User');
+// backend/middleware/auth.js
 const ErrorResponse = require('../utils/errorResponse');
+const jwt = require('jsonwebtoken');
+const asyncHandler = require('./async');
+const User = require('../models/User');
 
-// Protect middleware
+// Protect routes
 exports.protect = asyncHandler(async (req, res, next) => {
   let token;
-
-  if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith('Bearer')
-  ) {
-    // Set token from Bearer token in header
+  
+  // Check if token exists in headers
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     token = req.headers.authorization.split(' ')[1];
-  } else if (req.cookies.token) {
-    // Set token from cookie
+  }
+  
+  // Check if token exists in cookies (if using cookies)
+  else if (req.cookies.token) {
     token = req.cookies.token;
+  }
+  
+  // Check if token exists in query parameters
+  else if (req.query.token) {
+    token = req.query.token;
   }
 
   // Make sure token exists
@@ -26,9 +31,10 @@ exports.protect = asyncHandler(async (req, res, next) => {
   try {
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
+    
+    // Add user to request object
     req.user = await User.findById(decoded.id);
-
+    
     next();
   } catch (err) {
     return next(new ErrorResponse('Not authorized to access this route', 401));
@@ -39,13 +45,8 @@ exports.protect = asyncHandler(async (req, res, next) => {
 exports.authorize = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
-      return next(
-        new ErrorResponse(
-          `User role ${req.user.role} is not authorized to access this route`,
-          403
-        )
-      );
+      return next(new ErrorResponse(`User role ${req.user.role} is not authorized to access this route`, 403));
     }
     next();
-  };
+  }
 };

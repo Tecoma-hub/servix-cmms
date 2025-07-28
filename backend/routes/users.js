@@ -1,26 +1,24 @@
+// backend/routes/users.js
 const express = require('express');
 const { protect, authorize } = require('../middleware/auth');
 const {
   getUsers,
-  getSingleUser,
   createUser,
+  getUserById,
   updateUser,
   deleteUser
 } = require('../controllers/userController');
 
 const router = express.Router();
 
-router.use(protect);
+// Define routes
+router.route('/')
+  .get(protect, authorize('Engineer', 'Manager', 'Admin'), getUsers)
+  .post(protect, authorize('Engineer', 'Manager', 'Admin'), createUser);
 
-router
-  .route('/')
-  .get(authorize('Engineer'), getUsers)
-  .post(authorize('Engineer'), createUser);
-
-router
-  .route('/:id')
-  .get(getSingleUser)
-  .put(authorize('Engineer'), updateUser)
-  .delete(authorize('Engineer'), deleteUser);
+router.route('/:id')
+  .get(protect, authorize('Engineer', 'Manager', 'Admin'), getUserById)
+  .put(protect, authorize('Engineer', 'Manager', 'Admin'), updateUser)
+  .delete(protect, authorize('Engineer', 'Manager', 'Admin'), deleteUser);
 
 module.exports = router;

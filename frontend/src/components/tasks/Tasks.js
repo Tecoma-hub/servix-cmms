@@ -1,72 +1,106 @@
-import React from 'react';
+// frontend/src/components/tasks/Tasks.js
+import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import axios from 'axios';
 
 const Tasks = ({ user, setCurrentPage }) => {
-  React.useEffect(() => {
-    setCurrentPage('tasks');
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Set current page
+  useEffect(() => {
+    if (setCurrentPage && typeof setCurrentPage === 'function') {
+      setCurrentPage('tasks');
+    }
   }, [setCurrentPage]);
 
+  useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        const res = await axios.get('/tasks');
+        // Ensure data.tasks exists and is an array
+        setTasks(Array.isArray(res.data.tasks) ? res.data.tasks : []);
+        setLoading(false);
+      } catch (err) {
+        setError(err.response?.data?.message || 'Failed to fetch tasks');
+        setTasks([]); // Set to empty array on error
+        setLoading(false);
+      }
+    };
+
+    fetchTasks();
+  }, []);
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Task Management</h1>
-        {user.role === 'Engineer' && (
-          <button className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors flex items-center">
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-            Assign Task
-          </button>
-        )}
+    <div>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold text-gray-900">Tasks</h1>
+        <Link to="/add-task" className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors">
+          + Assign Task
+        </Link>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-xl p-6 shadow-sm border">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Pending Tasks</h3>
-          <div className="text-center py-12">
-            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No pending tasks</h3>
-            <p className="mt-1 text-sm text-gray-500">Tasks will appear here when assigned.</p>
-          </div>
+      {loading && (
+        <div className="flex items-center justify-center py-8">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-teal-600 border-r-transparent"></div>
         </div>
+      )}
 
-        <div className="bg-white rounded-xl p-6 shadow-sm border">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">In Progress</h3>
-          <div className="text-center py-12">
-            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No in-progress tasks</h3>
-            <p className="mt-1 text-sm text-gray-500">Tasks being worked on will appear here.</p>
-          </div>
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 border border-red-200 text-red-700 rounded-lg">
+          {error}
         </div>
+      )}
 
-        <div className="bg-white rounded-xl p-6 shadow-sm border">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Completed</h3>
-          <div className="text-center py-12">
-            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No completed tasks</h3>
-            <p className="mt-1 text-sm text-gray-500">Completed tasks will appear here.</p>
-          </div>
+      {!loading && !error && tasks.length === 0 && (
+        <div className="text-center py-8">
+          <p className="text-gray-600">No tasks found.</p>
         </div>
-      </div>
+      )}
 
-      {/* All Tasks */}
-      <div className="bg-white rounded-xl shadow-sm border">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">All Tasks</h3>
+      {!loading && !error && tasks.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned To</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deadline</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {tasks.map(task => (
+                <tr key={task._id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">{task.title}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{task.description}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{task.assignedTo?.name || 'Unassigned'}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                      task.status === 'Completed' ? 'bg-green-100 text-green-800' :
+                      task.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
+                      'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {task.status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {new Date(task.deadline).toLocaleDateString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        <div className="text-center py-12">
-          <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-          </svg>
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No tasks found</h3>
-          <p className="mt-1 text-sm text-gray-500">Get started by assigning a new task.</p>
-        </div>
-      </div>
+      )}
     </div>
   );
 };

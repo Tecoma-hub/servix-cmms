@@ -1,223 +1,152 @@
+// frontend/src/components/dashboard/Dashboard.js
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import axios from 'axios';
 
 const Dashboard = ({ user, setCurrentPage }) => {
-  const [stats, setStats] = useState({});
-  const [upcomingMaintenance, setUpcomingMaintenance] = useState([]);
+  const [counts, setCounts] = useState({
+    equipment: 0,
+    maintenance: 0,
+    tasks: 0,
+    users: 0
+  });
+  const [ongoingTasks, setOngoingTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
+  // Set current page
   useEffect(() => {
-    setCurrentPage('dashboard');
-    fetchDashboardData();
+    if (setCurrentPage && typeof setCurrentPage === 'function') {
+      setCurrentPage('dashboard');
+    }
   }, [setCurrentPage]);
 
-  const fetchDashboardData = async () => {
-    try {
-      const [statsRes, maintenanceRes] = await Promise.all([
-        axios.get('/equipment/stats'),
-        axios.get('/equipment?nextMaintenance[gte]=' + new Date().toISOString() + '&nextMaintenance[lte]=' + new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString())
-      ]);
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const [equipmentRes, maintenanceRes, tasksRes, usersRes] = await Promise.all([
+          axios.get('/equipment'),
+          axios.get('/maintenance'),
+          axios.get('/tasks'),
+          axios.get('/users')
+        ]);
 
-      setStats(statsRes.data.data);
-      setUpcomingMaintenance(maintenanceRes.data.data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+        setCounts({
+          equipment: equipmentRes.data.count || equipmentRes.data.data?.length || 0,
+          maintenance: maintenanceRes.data.count || maintenanceRes.data.data?.length || 0,
+          tasks: tasksRes.data.count || tasksRes.data.data?.length || 0,
+          users: usersRes.data.count || usersRes.data.data?.length || 0
+        });
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-teal-500"></div>
-      </div>
-    );
-  }
+        // Filter ongoing tasks (Pending and In Progress)
+        const allTasks = Array.isArray(tasksRes.data.tasks) ? tasksRes.data.tasks : [];
+        const ongoing = allTasks.filter(task => 
+          task.status === 'Pending' || task.status === 'In Progress'
+        ).slice(0, 5); // Get first 5 ongoing tasks
+
+        setOngoingTasks(ongoing);
+        setLoading(false);
+      } catch (err) {
+        console.error('Error fetching dashboard data:', err);
+        setError('Failed to load dashboard data');
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <div className="text-sm text-gray-500">
-          Last updated: {new Date().toLocaleString()}
-        </div>
+    <div className="p-6">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+        <p className="text-gray-600">Welcome back, {user?.name}!</p>
       </div>
-
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
-        <div className="bg-white rounded-xl p-6 shadow-sm border">
-          <div className="flex items-center">
-            <div className="p-3 bg-blue-100 rounded-lg">
-              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Total Equipment</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.totalEquipment || 0}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl p-6 shadow-sm border">
-          <div className="flex items-center">
-            <div className="p-3 bg-green-100 rounded-lg">
-              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Active Equipment</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.activeEquipment || 0}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl p-6 shadow-sm border">
-          <div className="flex items-center">
-            <div className="p-3 bg-yellow-100 rounded-lg">
-              <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Under Maintenance</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.maintenanceEquipment || 0}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl p-6 shadow-sm border">
-          <div className="flex items-center">
-            <div className="p-3 bg-red-100 rounded-lg">
-              <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Critical Equipment</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.criticalEquipment || 0}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl p-6 shadow-sm border">
-          <div className="flex items-center">
-            <div className="p-3 bg-purple-100 rounded-lg">
-              <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Pending Tasks</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.pendingTasks || 0}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl p-6 shadow-sm border">
-          <div className="flex items-center">
-            <div className="p-3 bg-blue-100 rounded-lg">
-              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">In Progress</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.inProgressTasks || 0}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Equipment Status Chart */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border col-span-1 lg:col-span-2">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Equipment Status Distribution</h3>
-          <div className="space-y-4">
-            {stats.statusDistribution && Object.entries(stats.statusDistribution).map(([status, count]) => (
-              <div key={status} className="flex items-center">
-                <div className="w-32 mr-4">
-                  <span className="text-sm text-gray-600">{status}</span>
-                </div>
-                <div className="flex-1 bg-gray-200 rounded-full h-2">
-                  <div 
-                    className={`h-2 rounded-full ${
-                      status === 'Active' ? 'bg-green-500' : 
-                      status === 'Under Maintenance' ? 'bg-yellow-500' : 'bg-gray-500'
-                    }`}
-                    style={{ width: `${(count / (stats.totalEquipment || 1)) * 100}%` }}
-                  ></div>
-                </div>
-                <span className="ml-4 text-sm font-medium text-gray-900 w-12">{count}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Department Distribution */}
-        <div className="bg-white rounded-xl p-6 shadow-sm border">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Department Summary</h3>
-          <div className="space-y-3">
-            {stats.departmentCounts && Object.entries(stats.departmentCounts).map(([dept, count]) => (
-              <div key={dept} className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">{dept}</span>
-                <span className="text-sm font-medium text-gray-900">{count}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <Link to="/equipment" className="bg-white rounded-xl p-6 shadow-sm border hover:shadow-md transition-shadow">
+          <h3 className="text-lg font-semibold text-gray-900">Equipment</h3>
+          <p className="text-2xl font-bold text-teal-600">{counts.equipment}</p>
+        </Link>
+        
+        <Link to="/maintenance" className="bg-white rounded-xl p-6 shadow-sm border hover:shadow-md transition-shadow">
+          <h3 className="text-lg font-semibold text-gray-900">Maintenance</h3>
+          <p className="text-2xl font-bold text-teal-600">{counts.maintenance}</p>
+        </Link>
+        
+        <Link to="/tasks" className="bg-white rounded-xl p-6 shadow-sm border hover:shadow-md transition-shadow">
+          <h3 className="text-lg font-semibold text-gray-900">Tasks</h3>
+          <p className="text-2xl font-bold text-teal-600">{counts.tasks}</p>
+        </Link>
+        
+        <Link to="/users" className="bg-white rounded-xl p-6 shadow-sm border hover:shadow-md transition-shadow">
+          <h3 className="text-lg font-semibold text-gray-900">Users</h3>
+          <p className="text-2xl font-bold text-teal-600">{counts.users}</p>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Upcoming Maintenance */}
         <div className="bg-white rounded-xl p-6 shadow-sm border">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Upcoming Maintenance</h3>
-          {upcomingMaintenance.length > 0 ? (
-            <div className="space-y-3">
-              {upcomingMaintenance.map(item => (
-                <div key={item._id} className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                  <div className="flex items-center">
-                    <div className="w-2 h-2 bg-yellow-500 rounded-full mr-3"></div>
-                    <div>
-                      <p className="font-medium text-gray-900">{item.name}</p>
-                      <p className="text-sm text-gray-600">{item.department} • Due: {new Date(item.nextMaintenance).toLocaleDateString()}</p>
-                    </div>
-                  </div>
-                  <span className="text-sm text-yellow-700 font-medium">Due Soon</span>
-                </div>
-              ))}
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Recent Equipment</h3>
+            <Link to="/add-equipment" className="bg-teal-600 text-white px-3 py-1 rounded text-sm hover:bg-teal-700 transition-colors">
+              + Add
+            </Link>
+          </div>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-teal-600 border-r-transparent"></div>
             </div>
+          ) : counts.equipment === 0 ? (
+            <p className="text-gray-600">No equipment found</p>
           ) : (
-            <p className="text-gray-500 text-center py-8">No upcoming maintenance scheduled</p>
+            <div className="space-y-2">
+              <p className="text-gray-600">You have {counts.equipment} equipment items</p>
+            </div>
           )}
         </div>
 
-        {/* Task Status */}
         <div className="bg-white rounded-xl p-6 shadow-sm border">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Task Status</h3>
-          <div className="space-y-3">
-            {stats.taskDistribution && Object.entries(stats.taskDistribution).map(([status, count]) => (
-              <div key={status} className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">{status}</span>
-                <div className="flex items-center space-x-2">
-                  <div className="w-32 bg-gray-200 rounded-full h-2">
-                    <div 
-                      className={`h-2 rounded-full ${
-                        status === 'Completed' ? 'bg-green-500' :
-                        status === 'In Progress' ? 'bg-blue-500' : 'bg-gray-500'
-                      }`}
-                      style={{ width: `${(count / (stats.totalTasks || 1)) * 100}%` }}
-                    ></div>
-                  </div>
-                  <span className="text-sm font-medium text-gray-900">{count}</span>
-                </div>
-              </div>
-            ))}
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Ongoing Tasks</h3>
+            <Link to="/add-task" className="bg-teal-600 text-white px-3 py-1 rounded text-sm hover:bg-teal-700 transition-colors">
+              + Assign
+            </Link>
           </div>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-teal-600 border-r-transparent"></div>
+            </div>
+          ) : ongoingTasks.length === 0 ? (
+            <p className="text-gray-600">No ongoing tasks</p>
+          ) : (
+            <div className="space-y-3">
+              {ongoingTasks.map(task => (
+                <div key={task._id} className="border-b border-gray-200 pb-2">
+                  <div className="flex justify-between">
+                    <span className="font-medium text-gray-900">{task.title}</span>
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                      task.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-blue-100 text-blue-800'
+                    }`}>
+                      {task.status}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-600 mt-1">
+                    Due: {new Date(task.deadline).toLocaleDateString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
+
+      {error && (
+        <div className="mt-6 p-4 bg-red-100 border border-red-200 text-red-700 rounded-lg">
+          {error}
+        </div>
+      )}
     </div>
   );
 };
