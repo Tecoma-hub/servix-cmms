@@ -21,30 +21,48 @@ import Sidebar from './components/layout/Sidebar';
 import PrivateRoute from './components/routing/PrivateRoute';
 
 // Set base URL for axios
-axios.defaults.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+axios.defaults.baseURL = 'http://localhost:5000/api';
 axios.defaults.withCredentials = true;
 
 // Add request interceptor for debugging
-axios.interceptors.request.use(request => {
-  console.log('Request URL:', request.url);
-  
-  // Ensure Authorization header is set with token from localStorage
-  const token = localStorage.getItem('token');
-  if (token) {
-    request.headers['Authorization'] = `Bearer ${token}`;
+axios.interceptors.request.use(
+  request => {
+    console.log('Request URL:', request.url);
+    
+    // Get token from localStorage
+    const token = localStorage.getItem('token');
+    
+    // Add Authorization header if token exists
+    if (token) {
+      request.headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    return request;
+  },
+  error => {
+    return Promise.reject(error);
   }
-  
-  return request;
-});
+);
 
 // Add response interceptor for debugging
-axios.interceptors.response.use(response => {
-  console.log('Response:', response);
-  return response;
-}, error => {
-  console.error('Axios Error:', error);
-  return Promise.reject(error);
-});
+axios.interceptors.response.use(
+  response => {
+    console.log('Response:', response);
+    return response;
+  },
+  error => {
+    console.error('Axios Error:', error);
+    
+    // Handle specific error cases
+    if (error.response?.status === 401) {
+      // Clear auth data if unauthorized
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+    }
+    
+    return Promise.reject(error);
+  }
+);
 
 function App() {
   const [user, setUser] = useState(null);
@@ -53,44 +71,65 @@ function App() {
 
   // Check for token on load
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      // Verify token and get user data
-      verifyToken(token);
-    } else {
-      setLoading(false);
-    }
-  }, []);
-
-  const verifyToken = async (token) => {
-    try {
-      const res = await axios.get('/auth/me', {
-        headers: {
-          'Authorization': `Bearer ${token}`
+    const initializeAuth = async () => {
+      const token = localStorage.getItem('token');
+      
+      if (token) {
+        try {
+          // Set the authorization header for this request
+          const config = {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          };
+          
+          // Verify token and get user data
+          const res = await axios.get('/auth/me', config);
+          
+          if (res.data && res.data.user) {
+            setUser(res.data.user);
+          } else {
+            localStorage.removeItem('token');
+          }
+        } catch (err) {
+          console.error('Auth verification error:', err);
+          localStorage.removeItem('token');
         }
-      });
-      setUser(res.data.user);
-    } catch (err) {
-      localStorage.removeItem('token');
-      setUser(null);
-    } finally {
+      }
+      
       setLoading(false);
-    }
-  };
+    };
+
+    initializeAuth();
+  }, []);
 
   const login = (userData) => {
     console.log('Login function called with:', userData);
-    setUser(userData.user);
-    localStorage.setItem('token', userData.token);
     
-    // Set Authorization header for future requests
-    axios.defaults.headers.common['Authorization'] = `Bearer ${userData.token}`;
+    if (userData && userData.token && userData.user) {
+      // Store token in localStorage
+      localStorage.setItem('token', userData.token);
+      
+      // Set user state
+      setUser(userData.user);
+      
+      // Set default authorization header for future requests
+      axios.defaults.headers.common['Authorization'] = `Bearer ${userData.token}`;
+    }
   };
 
   const logout = () => {
+    // Clear user data
     setUser(null);
+    
+    // Remove token from localStorage
     localStorage.removeItem('token');
+    
+    // Remove authorization header
     delete axios.defaults.headers.common['Authorization'];
+    
+    // Redirect to login
+    window.location.href = '/login';
   };
 
   if (loading) {
@@ -98,7 +137,7 @@ function App() {
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
           <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-teal-600 border-r-transparent"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+          <p className="mt-4 text-gray-600">Loading application...</p>
         </div>
       </div>
     );
@@ -125,7 +164,7 @@ function App() {
                 <Route 
                   path="/register" 
                   element={
-                    !user ? <Register /> : <Navigate to="/dashboard" replace />
+                    !user ? <Register login={login} /> : <Navigate to="/dashboard" replace />
                   } 
                 />
                 

@@ -1,109 +1,84 @@
 // backend/server.js
 const express = require('express');
 const mongoose = require('mongoose');
-const cors = require('cors');
 const dotenv = require('dotenv');
+const cors = require('cors');
 
-// Load environment variables
-dotenv.config();
+// Load env vars
+dotenv.config({ path: './.env' });
 
-// Create Express app
+// Check if MONGODB_URI is defined
+if (!process.env.MONGODB_URI) {
+  console.error('Error: MONGODB_URI is not defined in .env file');
+  process.exit(1);
+}
+
+// Route files
+const authRoutes = require('./routes/auth');
+const equipmentRoutes = require('./routes/equipment');
+const taskRoutes = require('./routes/tasks');
+const dashboardRoutes = require('./routes/dashboard');
+
+// Connect to MongoDB
+mongoose.connect(process.env.MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+}).then(() => console.log('MongoDB Connected...'))
+  .catch(err => console.log('MongoDB Connection Error:', err));
+
 const app = express();
 
-// Enable CORS with credentials
+// Enable CORS
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' ? false : 'http://localhost:3000',
+  origin: 'http://localhost:3000',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true
 }));
 
-// Body parser middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+// Body parser
+app.use(express.json());
 
-// Import routes
-console.log('=== ROUTE DEBUGGING ===');
-try {
-  const authRoutes = require('./routes/auth');
-  const equipmentRoutes = require('./routes/equipment');
-  const taskRoutes = require('./routes/tasks');
-  const maintenanceRoutes = require('./routes/maintenance');
-  const userRoutes = require('./routes/users');
+// Mount routers
+app.use('/api/auth', authRoutes);
+app.use('/api/equipment', equipmentRoutes);
+app.use('/api/tasks', taskRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
-  // API Routes
-  app.use('/api/auth', authRoutes);
-  app.use('/api/equipment', equipmentRoutes);
-  app.use('/api/tasks', taskRoutes);
-  app.use('/api/maintenance', maintenanceRoutes);
-  app.use('/api/users', userRoutes);
-  
-  console.log('All routes imported and mounted successfully');
-} catch (error) {
-  console.error('Error importing routes:', error);
-}
-
-// Simple route logger middleware
-app.use((req, res, next) => {
-  console.log(`${req.method} ${req.path}`);
-  next();
-});
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error('Error:', err.stack);
-  res.status(err.statusCode || 500).json({
-    success: false,
-    message: err.message || 'Server Error'
+// Add a simple route to verify the server is running
+app.get('/', (req, res) => {
+  res.status(200).json({ 
+    success: true, 
+    message: 'Servix CMMS API is running' 
   });
 });
 
-// 404 handler
+// Handle 404 - Must be after all other routes
 app.use('*', (req, res) => {
-  console.log(`404 - Route not found: ${req.method} ${req.originalUrl}`);
   res.status(404).json({
     success: false,
     message: 'Route not found'
   });
 });
 
-// Database connection
-const connectDB = async () => {
-  try {
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/servix_cmms', {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
-    console.log('MongoDB connected successfully');
-  } catch (error) {
-    console.error('Database connection error:', error);
-    process.exit(1);
-  }
-};
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    success: false,
+    message: 'Something went wrong'
+  });
+});
 
 const PORT = process.env.PORT || 5000;
 
-const startServer = async () => {
-  try {
-    await connectDB();
-    
-    const server = app.listen(PORT, () => {
-      console.log(`\nServer running on port ${PORT}`);
-      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-      
-      // Print API endpoints
-      console.log('\n=== API ENDPOINTS ===');
-      console.log('POST /api/auth/register - User registration');
-      console.log('POST /api/auth/login - User login');
-      console.log('GET /api/auth/me - Get current user');
-      console.log('GET /api/equipment - Get all equipment');
-      console.log('GET /api/tasks - Get all tasks');
-      console.log('=========================================');
-    });
-  } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
-  }
-};
+const server = app.listen(
+  PORT,
+  console.log(`Server running on port ${PORT}`)
+);
 
-startServer();
-
-module.exports = app;
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err, promise) => {
+  console.log(`Error: ${err.message}`);
+  // Close server & exit process
+  server.close(() => process.exit(1));
+});

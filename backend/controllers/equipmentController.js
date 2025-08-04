@@ -6,27 +6,11 @@ const asyncHandler = require('../middleware/async');
 // @desc    Get all equipment
 // @route   GET /api/equipment
 // @access  Private
-exports.getEquipment = asyncHandler(async (req, res, next) => {
+exports.getAllEquipment = asyncHandler(async (req, res, next) => {
   const equipment = await Equipment.find();
-  
   res.status(200).json({
     success: true,
-    count: equipment.length,
-    data: equipment
-  });
-});
-
-// @desc    Get equipment by department
-// @route   GET /api/equipment/department/:department
-// @access  Private
-exports.getEquipmentByDepartment = asyncHandler(async (req, res, next) => {
-  const equipment = await Equipment.find({ department: req.params.department });
-  
-  res.status(200).json({
-    success: true,
-    count: equipment.length,
-    department: req.params.department,
-    data: equipment
+     equipment
   });
 });
 
@@ -35,29 +19,41 @@ exports.getEquipmentByDepartment = asyncHandler(async (req, res, next) => {
 // @access  Private
 exports.getEquipmentById = asyncHandler(async (req, res, next) => {
   const equipment = await Equipment.findById(req.params.id);
-  
   if (!equipment) {
     return next(new ErrorResponse(`Equipment not found with id of ${req.params.id}`, 404));
   }
-  
   res.status(200).json({
     success: true,
-    data: equipment
+     equipment
   });
 });
 
 // @desc    Create new equipment
 // @route   POST /api/equipment
 // @access  Private
-exports.createEquipment = asyncHandler(async (req, res, next) => {
+exports.addEquipment = asyncHandler(async (req, res, next) => {
+  // Validate required fields
+  const requiredFields = ['name', 'manufacturer', 'model', 'serialNumber', 'installationDate'];
+  const missingFields = requiredFields.filter(field => !req.body[field]);
+  
+  if (missingFields.length > 0) {
+    return next(new ErrorResponse(`Please provide ${missingFields.join(', ')}`, 400));
+  }
+
+  // Check for duplicate serial number
+  const existingEquipment = await Equipment.findOne({ serialNumber: req.body.serialNumber });
+  if (existingEquipment) {
+    return next(new ErrorResponse('Equipment with this serial number already exists', 400));
+  }
+
   // Add createdBy field
   req.body.createdBy = req.user.id;
-  
+
   const equipment = await Equipment.create(req.body);
   
   res.status(201).json({
     success: true,
-    data: equipment
+     equipment
   });
 });
 
@@ -65,27 +61,27 @@ exports.createEquipment = asyncHandler(async (req, res, next) => {
 // @route   PUT /api/equipment/:id
 // @access  Private
 exports.updateEquipment = asyncHandler(async (req, res, next) => {
-  const equipment = await Equipment.findById(req.params.id);
-  
+  let equipment = await Equipment.findById(req.params.id);
   if (!equipment) {
     return next(new ErrorResponse(`Equipment not found with id of ${req.params.id}`, 404));
   }
 
-  // Check if status is being changed
-  if (req.body.status && req.body.status !== equipment.status) {
-    // Add status change information
-    req.body.changedBy = req.user.id;
-    req.body.statusChangeNotes = req.body.statusChangeNotes || `Status changed from ${equipment.status} to ${req.body.status}`;
+  // Check for duplicate serial number (except for the current equipment)
+  if (req.body.serialNumber && req.body.serialNumber !== equipment.serialNumber) {
+    const existingEquipment = await Equipment.findOne({ serialNumber: req.body.serialNumber });
+    if (existingEquipment) {
+      return next(new ErrorResponse('Equipment with this serial number already exists', 400));
+    }
   }
 
-  const updatedEquipment = await Equipment.findByIdAndUpdate(req.params.id, req.body, {
+  equipment = await Equipment.findByIdAndUpdate(req.params.id, req.body, {
     new: true,
     runValidators: true
   });
-  
+
   res.status(200).json({
     success: true,
-    data: updatedEquipment
+     equipment
   });
 });
 
@@ -93,14 +89,12 @@ exports.updateEquipment = asyncHandler(async (req, res, next) => {
 // @route   DELETE /api/equipment/:id
 // @access  Private
 exports.deleteEquipment = asyncHandler(async (req, res, next) => {
-  const equipment = await Equipment.findByIdAndDelete(req.params.id);
-  
+  const equipment = await Equipment.findById(req.params.id);
   if (!equipment) {
     return next(new ErrorResponse(`Equipment not found with id of ${req.params.id}`, 404));
   }
-  
-  res.status(200).json({
-    success: true,
-    data: {}
-  });
+
+  await equipment.remove();
+
+  res.status(200).json({ success: true, message: 'Equipment deleted' });
 });

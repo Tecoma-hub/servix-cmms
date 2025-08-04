@@ -1,29 +1,26 @@
 // backend/routes/equipment.js
 const express = require('express');
-const { protect, authorize } = require('../middleware/auth');
+const { protect } = require('../middleware/auth');
 const {
-  getEquipment,
-  getEquipmentByDepartment,
-  createEquipment,
+  getAllEquipment,
   getEquipmentById,
+  addEquipment,
   updateEquipment,
   deleteEquipment
 } = require('../controllers/equipmentController');
 
 const router = express.Router();
 
-// Define routes
-router.route('/')
-  .get(protect, getEquipment)
-  .post(protect, authorize('Engineer'), createEquipment);
+// Use protect middleware for all routes
+router.use(protect);
 
-// Route to get equipment by department
-router.route('/department/:department')
-  .get(protect, getEquipmentByDepartment);
+router.route('/')
+  .get(getAllEquipment)
+  .post(addEquipment);
 
 router.route('/:id')
-  .get(protect, getEquipmentById)
-  .put(protect, authorize('Engineer'), updateEquipment)
-  .delete(protect, authorize('Engineer'), deleteEquipment);
+  .get(getEquipmentById)
+  .put(updateEquipment)
+  .delete(deleteEquipment);
 
 module.exports = router;

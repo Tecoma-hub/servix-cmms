@@ -1,17 +1,13 @@
 // backend/routes/auth.js
 const express = require('express');
-const { protect, authorize } = require('../middleware/auth');
-const {
-  register,
-  login,
-  getMe
-} = require('../controllers/authController');
+const { requestOTP, verifyOTP, getMe } = require('../controllers/authController');
+const { protect } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Authentication routes
-router.post('/register', register);
-router.post('/login', login);
-router.get('/me', protect, getMe);
+// OTP-based authentication routes
+router.route('/request-otp').post(requestOTP);
+router.route('/verify-otp').post(verifyOTP);
+router.route('/me').get(protect, getMe);
 
 module.exports = router;

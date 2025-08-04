@@ -1,197 +1,227 @@
 // frontend/src/components/tasks/AddTask.js
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../../utils/api';
 
-const AddTask = ({ user }) => {
-  const navigate = useNavigate();
+const AddTask = ({ onTaskCreated }) => {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
+    priority: 'Medium',
+    dueDate: '',
+    equipmentId: '',
     assignedTo: '',
-    type: 'Maintenance',
-    deadline: '',
-    equipment: '',
-    priority: 'Medium'
+    status: 'Pending'
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [users, setUsers] = useState([]);
-  const [equipment, setEquipment] = useState([]);
+  const [equipmentList, setEquipmentList] = useState([]);
+  const [usersList, setUsersList] = useState([]);
 
   useEffect(() => {
-    // Fetch users and equipment for dropdowns
     const fetchData = async () => {
       try {
-        const [usersRes, equipmentRes] = await Promise.all([
-          axios.get('/users'),
-          axios.get('/equipment')
+        const [equipmentRes, usersRes] = await Promise.all([
+          api.get('/equipment'),
+          api.get('/auth/users')
         ]);
         
-        // Ensure data is in the expected format
-        setUsers(Array.isArray(usersRes.data.data) ? usersRes.data.data : []);
-        setEquipment(Array.isArray(equipmentRes.data.data) ? equipmentRes.data.data : []);
+        setEquipmentList(equipmentRes.data.equipment || []);
+        setUsersList(usersRes.data.users || []);
       } catch (err) {
-        console.error('Error fetching ', err);
-        setError('Failed to load users and equipment');
-        setUsers([]);
-        setEquipment([]);
+        console.error('Failed to fetch ', err);
       }
     };
+
     fetchData();
   }, []);
 
-  const { title, description, assignedTo, type, deadline, equipment: equipmentId, priority } = formData;
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
+  };
 
-  const onChange = e => setFormData({ ...formData, [e.target.name]: e.target.value });
-
-  const onSubmit = async e => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
-
     try {
-      const res = await axios.post('/tasks', formData);
-      console.log('Task created:', res.data);
-      alert('Task created successfully!');
-      navigate('/tasks');
+      setLoading(true);
+      setError('');
+      
+      // Validate required fields
+      if (!formData.title || !formData.priority || !formData.equipmentId) {
+        throw new Error('Please provide title, priority, and equipment');
+      }
+
+      const res = await api.post('/tasks', formData);
+      
+      // Reset form
+      setFormData({
+        title: '',
+        description: '',
+        priority: 'Medium',
+        dueDate: '',
+        equipmentId: '',
+        assignedTo: '',
+        status: 'Pending'
+      });
+      
+      // Notify parent component
+      if (onTaskCreated) {
+        onTaskCreated(res.data.task);
+      }
+      
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to create task');
+      setError(err.response?.data?.message || err.message || 'Failed to create task');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Create New Task</h1>
-          <p className="text-gray-600">Assign tasks to your team</p>
+    <div className="bg-white shadow rounded-lg p-6 mb-8">
+      <h2 className="text-xl font-bold text-gray-900 mb-6">Create New Task</h2>
+      
+      {error && (
+        <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-800 rounded">
+          {error}
         </div>
-
-        {error && (
-          <div className="mb-4 p-3 bg-red-100 border border-red-200 text-red-700 rounded-lg">
-            {error}
+      )}
+      
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Task Details */}
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Task Title *
+              </label>
+              <input
+                type="text"
+                name="title"
+                value={formData.title}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter task title"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Description *
+              </label>
+              <textarea
+                name="description"
+                value={formData.description}
+                onChange={handleChange}
+                rows="3"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter task description"
+                required
+              ></textarea>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Priority *
+              </label>
+              <select
+                name="priority"
+                value={formData.priority}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              >
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+                <option value="Urgent">Urgent</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Due Date
+              </label>
+              <input
+                type="date"
+                name="dueDate"
+                value={formData.dueDate}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
           </div>
-        )}
-
-        <form onSubmit={onSubmit} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
-            <input
-              type="text"
-              name="title"
-              value={title}
-              onChange={onChange}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              placeholder="Task title"
-              required
-            />
+          
+          {/* Assignment */}
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Equipment *
+              </label>
+              <select
+                name="equipmentId"
+                value={formData.equipmentId}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              >
+                <option value="">Select equipment</option>
+                {equipmentList.map(equip => (
+                  <option key={equip._id} value={equip._id}>
+                    {equip.name} ({equip.serialNumber})
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Assign To
+              </label>
+              <select
+                name="assignedTo"
+                value={formData.assignedTo}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Select user</option>
+                {usersList.map(user => (
+                  <option key={user._id} value={user._id}>
+                    {user.name} ({user.role})
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
-            <textarea
-              name="description"
-              value={description}
-              onChange={onChange}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              placeholder="Task description"
-              rows="3"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Assigned To</label>
-            <select
-              name="assignedTo"
-              value={assignedTo}
-              onChange={onChange}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              required
-            >
-              <option value="">Select a technician</option>
-              {users.map(user => (
-                <option key={user._id} value={user._id}>
-                  {user.name} ({user.role})
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Task Type</label>
-            <select
-              name="type"
-              value={type}
-              onChange={onChange}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              required
-            >
-              <option value="Maintenance">Maintenance</option>
-              <option value="Repair">Repair</option>
-              <option value="Calibration">Calibration</option>
-              <option value="Inspection">Inspection</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Deadline</label>
-            <input
-              type="date"
-              name="deadline"
-              value={deadline}
-              onChange={onChange}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Equipment</label>
-            <select
-              name="equipment"
-              value={equipmentId}
-              onChange={onChange}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              required
-            >
-              <option value="">Select equipment</option>
-              {equipment.map(item => (
-                <option key={item._id} value={item._id}>
-                  {item.name} ({item.serialNumber})
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
-            <select
-              name="priority"
-              value={priority}
-              onChange={onChange}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-            >
-              <option value="Low">Low</option>
-              <option value="Medium">Medium</option>
-              <option value="High">High</option>
-            </select>
-          </div>
+        </div>
+        
+        <div className="flex justify-end space-x-4">
+          <button
+            type="button"
+            onClick={() => setFormData({
+              title: '',
+              description: '',
+              priority: 'Medium',
+              dueDate: '',
+              equipmentId: '',
+              assignedTo: '',
+              status: 'Pending'
+            })}
+            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+          >
+            Reset
+          </button>
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700 transition-colors disabled:opacity-50"
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Creating Task...' : 'Create Task'}
+            {loading ? 'Creating...' : 'Create Task'}
           </button>
-          <div className="text-center">
-            <button
-              type="button"
-              onClick={() => navigate('/tasks')}
-              className="text-teal-600 hover:text-teal-700 text-sm font-medium"
-            >
-              Back to Tasks
-            </button>
-          </div>
-        </form>
-      </div>
+        </div>
+      </form>
     </div>
   );
 };

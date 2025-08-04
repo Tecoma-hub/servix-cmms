@@ -1,41 +1,52 @@
 // frontend/src/components/auth/Register.js
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate
+import { Link } from 'react-router-dom';
 import axios from 'axios';
 
 const Register = ({ login }) => {
-  const navigate = useNavigate(); // Initialize navigate
   const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: '',
-    role: 'Technician'
+    serviceNumber: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState('');
 
-  const { name, email, password, role } = formData;
+  const { serviceNumber } = formData;
 
   const onChange = e => setFormData({ ...formData, [e.target.name]: e.target.value });
 
-  const onSubmit = async e => {
+  const requestOTP = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      // POST request to register endpoint
-      const res = await axios.post('/auth/register', formData);
-      
-      // Call login function with response data
-      if (login && typeof login === 'function') {
-        login(res.data);
-      }
-      
-      // Redirect to dashboard
-      navigate('/dashboard');
+      await axios.post('/auth/request-otp', { serviceNumber });
+      setOtpSent(true);
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed');
+      setError(err.response?.data?.message || 'Failed to send OTP');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyOTP = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await axios.post('/auth/verify-otp', { serviceNumber, otp });
+      
+      if (login && res.data.token) {
+        login({
+          token: res.data.token,
+          user: res.data.user
+        });
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to verify OTP');
     } finally {
       setLoading(false);
     }
@@ -45,14 +56,8 @@ const Register = ({ login }) => {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-teal-100 rounded-full mb-4">
-            <svg className="w-8 h-8 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.993.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Servix CMMS</h1>
-          <p className="text-gray-600">Create your account</p>
+          <p className="text-gray-600">BMED Staff Registration</p>
         </div>
 
         {error && (
@@ -61,72 +66,74 @@ const Register = ({ login }) => {
           </div>
         )}
 
-        <form onSubmit={onSubmit} className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
-            <input
-              type="text"
-              name="name"
-              value={name}
-              onChange={onChange}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              placeholder="Enter your full name"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-            <input
-              type="email"
-              name="email"
-              value={email}
-              onChange={onChange}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              placeholder="Enter your email"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-            <input
-              type="password"
-              name="password"
-              value={password}
-              onChange={onChange}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              placeholder="Create a password"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
-            <select
-              name="role"
-              value={role}
-              onChange={onChange}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-            >
-              <option value="Technician">Technician</option>
-              <option value="Engineer">Engineer</option>
-            </select>
-          </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700 transition-colors disabled:opacity-50"
-          >
-            {loading ? 'Registering...' : 'Register'}
-          </button>
-          <div className="text-center">
+        {!otpSent ? (
+          <form onSubmit={requestOTP} className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Service Number</label>
+              <input
+                type="text"
+                name="serviceNumber"
+                value={serviceNumber}
+                onChange={onChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                placeholder="Enter your service number"
+                required
+              />
+            </div>
             <button
-              type="button"
-              onClick={() => navigate('/login')} // This will now work
-              className="text-teal-600 hover:text-teal-700 text-sm font-medium"
+              type="submit"
+              disabled={loading}
+              className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700 transition-colors disabled:opacity-50"
             >
-              Already have an account? Sign In
+              {loading ? 'Sending OTP...' : 'Get Started'}
             </button>
-          </div>
-        </form>
+            <div className="text-center">
+              <p className="text-sm text-gray-600 mt-4">
+                Already have an account?{' '}
+                <Link to="/login" className="text-teal-600 hover:text-teal-700">
+                  Login
+                </Link>
+              </p>
+            </div>
+          </form>
+        ) : (
+          <form onSubmit={verifyOTP} className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Enter OTP</label>
+              <input
+                type="text"
+                name="otp"
+                value={otp}
+                onChange={e => setOtp(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                placeholder="Enter 6-digit OTP"
+                required
+                maxLength="6"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700 transition-colors disabled:opacity-50"
+            >
+              {loading ? 'Verifying...' : 'Verify OTP'}
+            </button>
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => setOtpSent(false)}
+                className="text-sm text-teal-600 hover:text-teal-700"
+              >
+                Change Service Number
+              </button>
+            </div>
+          </form>
+        )}
+        
+        <div className="mt-6 text-center text-xs text-gray-500">
+          <p>Registration is restricted to pre-approved hospital staff only.</p>
+          <p>An OTP will be sent to your registered phone number for verification.</p>
+        </div>
       </div>
     </div>
   );

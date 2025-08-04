@@ -1,51 +1,46 @@
 // backend/models/Task.js
 const mongoose = require('mongoose');
 
-const taskSchema = new mongoose.Schema({
+const TaskSchema = new mongoose.Schema({
   title: {
     type: String,
-    required: [true, 'Task title is required'],
+    required: [true, 'Please add a title'],
     trim: true,
     maxlength: [100, 'Title cannot be more than 100 characters']
   },
   description: {
     type: String,
-    required: [true, 'Task description is required'],
-    trim: true
-  },
-  assignedTo: {
-    type: mongoose.Schema.ObjectId,
-    ref: 'User',
-    required: [true, 'Task assignee is required']
-  },
-  assignedBy: {
-    type: mongoose.Schema.ObjectId,
-    ref: 'User',
-    required: [true, 'Task assigner is required']
-  },
-  equipment: {
-    type: mongoose.Schema.ObjectId,
-    ref: 'Equipment',
-    required: [true, 'Equipment is required']
-  },
-  type: {
-    type: String,
-    enum: ['Maintenance', 'Repair', 'Calibration', 'Inspection'],
-    required: [true, 'Task type is required']
+    required: [true, 'Please add a description'],
+    maxlength: [1000, 'Description cannot be more than 1000 characters']
   },
   status: {
     type: String,
-    enum: ['Pending', 'In Progress', 'Completed', 'Cancelled'],
+    enum: ['Pending', 'In Progress', 'Completed', 'On Hold'],
     default: 'Pending'
   },
   priority: {
     type: String,
-    enum: ['Low', 'Medium', 'High'],
+    enum: ['Low', 'Medium', 'High', 'Urgent'],
     default: 'Medium'
   },
-  deadline: {
+  equipment: {
+    type: mongoose.Schema.ObjectId,
+    ref: 'Equipment',
+    required: true
+  },
+  assignedTo: {
+    type: mongoose.Schema.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  dueDate: {
     type: Date,
-    required: [true, 'Deadline is required']
+    required: [true, 'Please add a due date']
+  },
+  createdBy: {
+    type: mongoose.Schema.ObjectId,
+    ref: 'User',
+    required: true
   },
   createdAt: {
     type: Date,
@@ -53,4 +48,4 @@ const taskSchema = new mongoose.Schema({
   }
 });
 
-module.exports = mongoose.model('Task', taskSchema);
+module.exports = mongoose.model('Task', TaskSchema);
