@@ -8,7 +8,7 @@ const AddEquipment = ({ onEquipmentAdded }) => {
     manufacturer: '',
     model: '',
     serialNumber: '',
-    status: 'Operational',
+    status: 'Serviceable',
     installationDate: '',
     warrantyExpiry: '',
     department: '',
@@ -45,7 +45,7 @@ const AddEquipment = ({ onEquipmentAdded }) => {
         manufacturer: '',
         model: '',
         serialNumber: '',
-        status: 'Operational',
+        status: 'Serviceable',
         installationDate: '',
         warrantyExpiry: '',
         department: '',
@@ -154,9 +154,8 @@ const AddEquipment = ({ onEquipmentAdded }) => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
               >
-                <option value="Operational">Serviceable</option>
-                <option value="Under Maintenance">Unserviceable</option>
-                <option value="Out of Service">Unserviceable</option>
+                <option value="Serviceable">Serviceable</option>
+                <option value="Unserviceable">Unserviceable</option>
                 <option value="Decommissioned">Decommissioned</option>
                 <option value="Auctioned">Auctioned</option>
               </select>

@@ -1,69 +1,91 @@
 // frontend/src/components/layout/Sidebar.js
 import React from 'react';
-import { Link } from 'react-router-dom';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faHome, faBox, faWrench, faTasks, faUser } from '@fortawesome/free-solid-svg-icons';
+import { Link, useLocation } from 'react-router-dom';
+import { Home, Box, Wrench, ListTodo, Users, Settings, BarChart2, FileText } from 'lucide-react';
 
-const Sidebar = ({ currentPage }) => {
+const Sidebar = () => {
+  const location = useLocation();
+  const currentPage = location.pathname.split('/')[1] || 'dashboard';
+
+  // Define navigation items
+  const navItems = [
+    { path: 'dashboard', label: 'Dashboard', icon: BarChart2 },
+    { path: 'equipment', label: 'Equipment', icon: Box },
+    { path: 'maintenance', label: 'Maintenance', icon: Wrench },
+    { path: 'tasks', label: 'Tasks', icon: ListTodo },
+    { path: 'users', label: 'Users', icon: Users },
+    { path: 'reports', label: 'Reports', icon: FileText },
+    { path: 'settings', label: 'Settings', icon: Settings }
+  ];
+
   return (
-    <div className="bg-gray-800 text-white w-64 min-h-screen p-4">
-      <div className="mb-8">
-        <h1 className="text-xl font-bold">Servix CMMS</h1>
+    <div className="bg-white text-slate-800 w-64 min-h-screen border-r border-slate-200 shadow-lg flex flex-col">
+      {/* Logo/Header */}
+      <div className="p-6 border-b border-slate-200">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-green-500 rounded-xl flex items-center justify-center">
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2-2v2m8 0V6a2 2 0 012 2v6a2 2 0 01-2 2H8a2 2 0 01-2-2V8a2 2 0 012-2V6" />
+            </svg>
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-slate-800">Servix CMMS</h1>
+            <p className="text-sm text-slate-500">Maintenance System</p>
+          </div>
+        </div>
       </div>
-      <nav>
+
+      {/* Navigation */}
+      <nav className="flex-1 p-4">
         <ul className="space-y-2">
-          <li>
-            <Link
-              to="/dashboard"
-              className={`block py-2 px-4 rounded hover:bg-gray-700 transition-colors ${
-                currentPage === 'dashboard' ? 'bg-gray-700' : ''
-              }`}
-            >
-              <FontAwesomeIcon icon={faHome} className="mr-2" /> Dashboard
-            </Link>
-          </li>
-          <li>
-            <Link
-              to="/equipment"
-              className={`block py-2 px-4 rounded hover:bg-gray-700 transition-colors ${
-                currentPage === 'equipment' ? 'bg-gray-700' : ''
-              }`}
-            >
-              <FontAwesomeIcon icon={faBox} className="mr-2" /> Equipment
-            </Link>
-          </li>
-          <li>
-            <Link
-              to="/maintenance"
-              className={`block py-2 px-4 rounded hover:bg-gray-700 transition-colors ${
-                currentPage === 'maintenance' ? 'bg-gray-700' : ''
-              }`}
-            >
-              <FontAwesomeIcon icon={faWrench} className="mr-2" /> Maintenance
-            </Link>
-          </li>
-          <li>
-            <Link
-              to="/tasks"
-              className={`block py-2 px-4 rounded hover:bg-gray-700 transition-colors ${
-                currentPage === 'tasks' ? 'bg-gray-700' : ''
-              }`}
-            >
-              <FontAwesomeIcon icon={faTasks} className="mr-2" /> Tasks
-            </Link>
-          </li>
-          <li>
-            <Link
-              to="/users"
-              className={`block py-2 px-4 rounded hover:bg-gray-700 transition-colors ${
-                currentPage === 'users' ? 'bg-gray-700' : ''
-              }`}
-            >
-              <FontAwesomeIcon icon={faUser} className="mr-2" /> Users
-            </Link>
-          </li>
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = currentPage === item.path;
+            
+            return (
+              <li key={item.path}>
+                <Link
+                  to={`/${item.path}`}
+                  className={`flex items-center space-x-3 py-3 px-4 rounded-xl transition-all duration-200 group ${
+                    isActive 
+                      ? 'bg-gradient-to-r from-blue-600 to-green-500 text-white shadow-md' 
+                      : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <Icon 
+                    className={`w-5 h-5 transition-transform duration-200 ${
+                      isActive 
+                        ? 'text-white' 
+                        : 'text-slate-500 group-hover:text-blue-600'
+                    }`} 
+                  />
+                  <span className="font-medium">{item.label}</span>
+                  {isActive && (
+                    <div className="ml-auto w-2 h-2 bg-white rounded-full"></div>
+                  )}
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       </nav>
+
+      {/* User Profile */}
+      <div className="p-4 border-t border-slate-200 bg-slate-50">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-green-500 rounded-full flex items-center justify-center text-white font-bold">
+            {localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).name.charAt(0) : 'U'}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-slate-800 truncate">
+              {localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).name : 'User'}
+            </p>
+            <p className="text-xs text-slate-500 truncate">
+              {localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).role : 'Staff'}
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

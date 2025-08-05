@@ -16,7 +16,7 @@ const Tasks = () => {
         setLoading(true);
         setError('');
         
-        const res = await api.get('/api/tasks');
+        const res = await api.get('/tasks');
         setTasks(Array.isArray(res.data.tasks) ? res.data.tasks : []);
       } catch (err) {
         setError(err.response?.data?.message || 'Failed to fetch tasks');

@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-const EquipmentInventory = () => {
+const EquipmentList = () => {
   const [equipment, setEquipment] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     const fetchEquipment = async () => {
@@ -24,29 +23,49 @@ const EquipmentInventory = () => {
     fetchEquipment();
   }, []);
 
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'Serviceable':
+        return 'bg-green-100 text-green-800 border border-green-200';
+      case 'Under Maintenance':
+        return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
+      case 'Unserviceable':
+        return 'bg-red-100 text-red-800 border border-red-200';
+      case 'Decommissioned':
+        return 'bg-gray-100 text-gray-800 border border-gray-200';
+      case 'Auctioned':
+        return 'bg-purple-100 text-purple-800 border border-purple-200';
+      default:
+        return 'bg-blue-100 text-blue-800 border border-blue-200';
+    }
+  };
+
   const handlePrint = () => {
-    // Create a printable version of all equipment data
     const printWindow = window.open('', '_blank');
     const currentDate = new Date().toLocaleDateString();
     
-    let equipmentRows = '';
-    if (equipment.length === 0) {
-      equipmentRows = '<tr><td colspan="8" class="text-center py-4 text-slate-500">No equipment found</td></tr>';
-    } else {
-      equipmentRows = equipment.map(eq => `
-        <tr class="border-b border-slate-200">
-          <td class="py-3 px-4">${eq.name || 'N/A'}</td>
-          <td class="py-3 px-4">${eq.serialNumber || 'N/A'}</td>
-          <td class="py-3 px-4">${eq.model || 'N/A'}</td>
-          <td class="py-3 px-4">${eq.manufacturer || 'N/A'}</td>
-          <td class="py-3 px-4">${eq.department || 'N/A'}</td>
-          <td class="py-3 px-4">${eq.location || 'N/A'}</td>
-          <td class="py-3 px-4">${eq.category || 'N/A'}</td>
-          <td class="py-3 px-4">${eq.installationDate ? new Date(eq.installationDate).toLocaleDateString() : 'N/A'}</td>
-        </tr>
-      `).join('');
-    }
+    // Sort equipment by name for consistent printing
+    const sortedEquipment = [...equipment].sort((a, b) => a.name.localeCompare(b.name));
     
+    const equipmentRows = sortedEquipment.map(equip => `
+      <tr class="border-b border-slate-200">
+        <td class="py-3 px-4 text-slate-700">${equip.name || 'N/A'}</td>
+        <td class="py-3 px-4 text-slate-700">${equip.serialNumber || 'N/A'}</td>
+        <td class="py-3 px-4 text-slate-700">${equip.model || 'N/A'}</td>
+        <td class="py-3 px-4 text-slate-700">${equip.manufacturer || 'N/A'}</td>
+        <td class="py-3 px-4 text-slate-700">${equip.department || 'N/A'}</td>
+        <td class="py-3 px-4 text-slate-700">${equip.location || 'N/A'}</td>
+        <td class="py-3 px-4 text-slate-700">${equip.category || 'N/A'}</td>
+        <td class="py-3 px-4">
+          <span class="inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(equip.status)}">
+            ${equip.status || 'Unknown'}
+          </span>
+        </td>
+        <td class="py-3 px-4 text-slate-700">${equip.installationDate ? new Date(equip.installationDate).toLocaleDateString() : 'N/A'}</td>
+        <td class="py-3 px-4 text-slate-700">${equip.warrantyExpiry ? new Date(equip.warrantyExpiry).toLocaleDateString() : 'N/A'}</td>
+      </tr>
+    `).join('');
+
     const printContent = `
       <html>
         <head>
@@ -81,27 +100,28 @@ const EquipmentInventory = () => {
               color: #6b7280;
               font-size: 14px;
             }
-            .stats {
-              display: grid;
-              grid-template-columns: repeat(4, 1fr);
-              gap: 20px;
-              margin-bottom: 30px;
-            }
-            .stat-card {
-              background-color: #f9fafb;
-              border: 1px solid #e5e7eb;
+            .summary {
+              background-color: #f8fafc;
+              border: 1px solid #e2e8f0;
               border-radius: 8px;
               padding: 15px;
+              margin-bottom: 30px;
+              display: flex;
+              justify-content: space-around;
+            }
+            .summary-item {
               text-align: center;
             }
-            .stat-value {
-              font-size: 24px;
-              font-weight: bold;
-              color: #3b82f6;
+            .summary-label {
+              font-size: 12px;
+              color: #64748b;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
             }
-            .stat-label {
-              font-size: 14px;
-              color: #6b7280;
+            .summary-value {
+              font-size: 18px;
+              font-weight: bold;
+              color: #1e40af;
             }
             .table-container {
               overflow-x: auto;
@@ -109,21 +129,27 @@ const EquipmentInventory = () => {
             table {
               width: 100%;
               border-collapse: collapse;
+              margin-top: 20px;
             }
             th {
               background-color: #f1f5f9;
               color: #475569;
               font-weight: 600;
               text-align: left;
-              padding: 12px 16px;
-              border-bottom: 2px solid #e2e8f0;
+              padding: 12px 4px;
+              font-size: 12px;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
             }
             td {
-              padding: 12px 16px;
-              border-bottom: 1px solid #e2e8f0;
+              padding: 8px 4px;
+              font-size: 12px;
             }
-            tr:hover {
-              background-color: #f8fafc;
+            .status-badge {
+              padding: 4px 8px;
+              border-radius: 12px;
+              font-size: 11px;
+              font-weight: 600;
             }
             .footer {
               text-align: center;
@@ -150,22 +176,22 @@ const EquipmentInventory = () => {
             <div class="date">Printed on: ${currentDate}</div>
           </div>
           
-          <div class="stats">
-            <div class="stat-card">
-              <div class="stat-value">${equipment.length}</div>
-              <div class="stat-label">Total Equipment</div>
+          <div class="summary">
+            <div class="summary-item">
+              <div class="summary-label">Total Equipment</div>
+              <div class="summary-value">${equipment.length}</div>
             </div>
-            <div class="stat-card">
-              <div class="stat-value">${equipment.filter(eq => eq.status === 'Serviceable').length}</div>
-              <div class="stat-label">Serviceable</div>
+            <div class="summary-item">
+              <div class="summary-label">Serviceable</div>
+              <div class="summary-value">${equipment.filter(e => e.status === 'Serviceable').length}</div>
             </div>
-            <div class="stat-card">
-              <div class="stat-value">${equipment.filter(eq => eq.status === 'Under Maintenance').length}</div>
-              <div class="stat-label">Under Maintenance</div>
+            <div class="summary-item">
+              <div class="summary-label">Under Maintenance</div>
+              <div class="summary-value">${equipment.filter(e => e.status === 'Under Maintenance').length}</div>
             </div>
-            <div class="stat-card">
-              <div class="stat-value">${equipment.filter(eq => eq.status === 'Unserviceable').length}</div>
-              <div class="stat-label">Unserviceable</div>
+            <div class="summary-item">
+              <div class="summary-label">Unserviceable</div>
+              <div class="summary-value">${equipment.filter(e => e.status === 'Unserviceable').length}</div>
             </div>
           </div>
           
@@ -180,7 +206,9 @@ const EquipmentInventory = () => {
                   <th>Department</th>
                   <th>Location</th>
                   <th>Category</th>
+                  <th>Status</th>
                   <th>Installation Date</th>
+                  <th>Warranty Expiry</th>
                 </tr>
               </thead>
               <tbody>
@@ -201,24 +229,41 @@ const EquipmentInventory = () => {
     printWindow.print();
   };
 
-  // Filter equipment based on search term
-  const filteredEquipment = equipment.filter(eq => 
-    eq.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    eq.serialNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    eq.model?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    eq.manufacturer?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    eq.department?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    eq.location?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    eq.category?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-12 px-4">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center">
+            <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
+            <p className="mt-4 text-xl text-slate-600">Loading equipment inventory...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-12 px-4">
+        <div className="max-w-7xl mx-auto">
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-8 text-center">
+            <svg className="w-16 h-16 text-red-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <h3 className="text-lg font-medium text-red-800 mb-2">Error Loading Equipment</h3>
+            <p className="text-red-700">{error}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Calculate statistics
-  const stats = {
-    total: equipment.length,
-    serviceable: equipment.filter(eq => eq.status === 'Serviceable').length,
-    underMaintenance: equipment.filter(eq => eq.status === 'Under Maintenance').length,
-    unserviceable: equipment.filter(eq => eq.status === 'Unserviceable').length
-  };
+  const totalEquipment = equipment.length;
+  const serviceableCount = equipment.filter(e => e.status === 'Serviceable').length;
+  const maintenanceCount = equipment.filter(e => e.status === 'Under Maintenance').length;
+  const unserviceableCount = equipment.filter(e => e.status === 'Unserviceable').length;
+  const decommissionedCount = equipment.filter(e => e.status === 'Decommissioned').length;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-12 px-4">
@@ -229,68 +274,45 @@ const EquipmentInventory = () => {
             Equipment Inventory
           </h1>
           <p className="text-slate-600 text-lg">
-            View and manage all equipment in your organization
+            Comprehensive list of all equipment in the system
           </p>
         </div>
 
-        {/* Error Display */}
-        {error && (
-          <div className="max-w-4xl mx-auto mb-8 p-4 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl font-medium text-center">
-            {error}
-          </div>
-        )}
-
-        {/* Stats Cards */}
-        <div className="max-w-4xl mx-auto mb-8 grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="bg-white rounded-xl p-6 shadow-lg border border-slate-200 text-center">
-            <div className="text-3xl font-bold text-blue-600 mb-2">{stats.total}</div>
+        {/* Statistics Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
+          <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200 text-center">
+            <div className="text-3xl font-bold text-blue-600 mb-2">{totalEquipment}</div>
             <div className="text-slate-600 font-medium">Total Equipment</div>
           </div>
-          <div className="bg-white rounded-xl p-6 shadow-lg border border-slate-200 text-center">
-            <div className="text-3xl font-bold text-green-600 mb-2">{stats.serviceable}</div>
+          
+          <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200 text-center">
+            <div className="text-3xl font-bold text-green-600 mb-2">{serviceableCount}</div>
             <div className="text-slate-600 font-medium">Serviceable</div>
           </div>
-          <div className="bg-white rounded-xl p-6 shadow-lg border border-slate-200 text-center">
-            <div className="text-3xl font-bold text-yellow-600 mb-2">{stats.underMaintenance}</div>
+          
+          <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200 text-center">
+            <div className="text-3xl font-bold text-yellow-600 mb-2">{maintenanceCount}</div>
             <div className="text-slate-600 font-medium">Under Maintenance</div>
           </div>
-          <div className="bg-white rounded-xl p-6 shadow-lg border border-slate-200 text-center">
-            <div className="text-3xl font-bold text-red-600 mb-2">{stats.unserviceable}</div>
+          
+          <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200 text-center">
+            <div className="text-3xl font-bold text-red-600 mb-2">{unserviceableCount}</div>
             <div className="text-slate-600 font-medium">Unserviceable</div>
+          </div>
+          
+          <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200 text-center">
+            <div className="text-3xl font-bold text-gray-600 mb-2">{decommissionedCount}</div>
+            <div className="text-slate-600 font-medium">Decommissioned</div>
           </div>
         </div>
 
-        {/* Search and Print Controls */}
-        <div className="max-w-4xl mx-auto mb-8 flex flex-col sm:flex-row gap-4 items-center justify-between">
-          <div className="relative flex-1 max-w-md">
-            <input
-              type="text"
-              placeholder="Search equipment..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-slate-700 placeholder-slate-400"
-            />
-            <svg 
-              className="absolute left-3 top-3.5 h-5 w-5 text-slate-400" 
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24"
-            >
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" 
-              />
-            </svg>
-          </div>
-          
+        {/* Print Button */}
+        <div className="flex justify-end mb-8">
           <button
-            type="button"
             onClick={handlePrint}
-            className="flex items-center px-6 py-3 bg-gradient-to-r from-gray-600 to-gray-700 text-white font-semibold rounded-xl hover:from-gray-700 hover:to-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all duration-200 transform hover:scale-105 shadow-lg"
+            className="flex items-center px-8 py-4 bg-gradient-to-r from-gray-600 to-gray-700 text-white font-semibold rounded-xl hover:from-gray-700 hover:to-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all duration-200 transform hover:scale-105 shadow-lg"
           >
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
             </svg>
             Print Inventory
@@ -298,63 +320,61 @@ const EquipmentInventory = () => {
         </div>
 
         {/* Equipment Table */}
-        <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-          {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
-              <span className="ml-3 text-slate-600">Loading equipment data...</span>
-            </div>
-          ) : filteredEquipment.length === 0 ? (
-            <div className="text-center py-16">
-              <svg className="w-16 h-16 mx-auto text-slate-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-              </svg>
-              <h3 className="text-xl font-medium text-slate-700 mb-2">No equipment found</h3>
-              <p className="text-slate-500">Try adjusting your search or add new equipment</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-slate-50 border-b border-slate-200">
+        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm uppercase tracking-wider">Equipment Name</th>
+                  <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm uppercase tracking-wider">Serial Number</th>
+                  <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm uppercase tracking-wider">Model</th>
+                  <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm uppercase tracking-wider">Manufacturer</th>
+                  <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm uppercase tracking-wider">Department</th>
+                  <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm uppercase tracking-wider">Location</th>
+                  <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm uppercase tracking-wider">Category</th>
+                  <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm uppercase tracking-wider">Status</th>
+                  <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm uppercase tracking-wider">Installation Date</th>
+                  <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm uppercase tracking-wider">Warranty Expiry</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {equipment.length === 0 ? (
                   <tr>
-                    <th className="text-left py-4 px-6 font-semibold text-slate-700">Equipment Name</th>
-                    <th className="text-left py-4 px-6 font-semibold text-slate-700">Serial Number</th>
-                    <th className="text-left py-4 px-6 font-semibold text-slate-700">Model</th>
-                    <th className="text-left py-4 px-6 font-semibold text-slate-700">Manufacturer</th>
-                    <th className="text-left py-4 px-6 font-semibold text-slate-700">Department</th>
-                    <th className="text-left py-4 px-6 font-semibold text-slate-700">Location</th>
-                    <th className="text-left py-4 px-6 font-semibold text-slate-700">Category</th>
-                    <th className="text-left py-4 px-6 font-semibold text-slate-700">Installation Date</th>
+                    <td colSpan="10" className="py-12 text-center text-slate-500">
+                      <svg className="w-16 h-16 mx-auto mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <p className="text-lg font-medium">No equipment found</p>
+                      <p className="text-slate-400">Add new equipment to get started</p>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {filteredEquipment.map((eq) => (
-                    <tr key={eq._id} className="hover:bg-slate-50 transition-colors duration-150">
-                      <td className="py-4 px-6 font-medium text-slate-800">{eq.name}</td>
-                      <td className="py-4 px-6 text-slate-600">{eq.serialNumber}</td>
-                      <td className="py-4 px-6 text-slate-600">{eq.model}</td>
-                      <td className="py-4 px-6 text-slate-600">{eq.manufacturer}</td>
-                      <td className="py-4 px-6 text-slate-600">{eq.department}</td>
-                      <td className="py-4 px-6 text-slate-600">{eq.location}</td>
+                ) : (
+                  equipment.map((equip) => (
+                    <tr key={equip._id} className="hover:bg-slate-50 transition-colors duration-150">
+                      <td className="py-4 px-6 text-slate-700 font-medium">{equip.name || 'N/A'}</td>
+                      <td className="py-4 px-6 text-slate-700">{equip.serialNumber || 'N/A'}</td>
+                      <td className="py-4 px-6 text-slate-700">{equip.model || 'N/A'}</td>
+                      <td className="py-4 px-6 text-slate-700">{equip.manufacturer || 'N/A'}</td>
+                      <td className="py-4 px-6 text-slate-700">{equip.department || 'N/A'}</td>
+                      <td className="py-4 px-6 text-slate-700">{equip.location || 'N/A'}</td>
+                      <td className="py-4 px-6 text-slate-700">{equip.category || 'N/A'}</td>
                       <td className="py-4 px-6">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                          eq.category === 'Diagnostic' ? 'bg-blue-100 text-blue-800' :
-                          eq.category === 'Therapeutic' ? 'bg-green-100 text-green-800' :
-                          eq.category === 'Monitoring' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-purple-100 text-purple-800'
-                        }`}>
-                          {eq.category}
+                        <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(equip.status)}`}>
+                          {equip.status || 'Unknown'}
                         </span>
                       </td>
-                      <td className="py-4 px-6 text-slate-600">
-                        {eq.installationDate ? new Date(eq.installationDate).toLocaleDateString() : 'N/A'}
+                      <td className="py-4 px-6 text-slate-700">
+                        {equip.installationDate ? new Date(equip.installationDate).toLocaleDateString() : 'N/A'}
+                      </td>
+                      <td className="py-4 px-6 text-slate-700">
+                        {equip.warrantyExpiry ? new Date(equip.warrantyExpiry).toLocaleDateString() : 'N/A'}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* Decorative Elements */}
@@ -365,4 +385,4 @@ const EquipmentInventory = () => {
   );
 };
 
-export default EquipmentInventory;
+export default EquipmentList;
