@@ -55,6 +55,10 @@ const UserSchema = new mongoose.Schema({
     code: String,
     expiresAt: Date
   },
+  preApproved: {
+    type: Boolean,
+    default: false
+  },
   createdAt: {
     type: Date,
     default: Date.now

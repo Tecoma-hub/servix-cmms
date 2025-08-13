@@ -3,11 +3,12 @@ const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const cors = require('cors');
+const http = require('http');                 // ✅ new
+const { Server } = require('socket.io');      // ✅ new
 
 // Load env vars
 dotenv.config({ path: './.env' });
 
-// Check if MONGODB_URI is defined
 if (!process.env.MONGODB_URI) {
   console.error('Error: MONGODB_URI is not defined in .env file');
   process.exit(1);
@@ -18,6 +19,7 @@ const authRoutes = require('./routes/auth');
 const equipmentRoutes = require('./routes/equipment');
 const taskRoutes = require('./routes/tasks');
 const dashboardRoutes = require('./routes/dashboard');
+const userRoutes = require('./routes/users');
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI, {
@@ -28,9 +30,10 @@ mongoose.connect(process.env.MONGODB_URI, {
 
 const app = express();
 
-// Enable CORS
+// CORS setup
+const FRONTEND_ORIGIN = 'http://localhost:3000';
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: FRONTEND_ORIGIN,
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true
 }));
@@ -38,21 +41,49 @@ app.use(cors({
 // Body parser
 app.use(express.json());
 
+// ✅ Create HTTP server + Socket.IO
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: FRONTEND_ORIGIN,
+    methods: ['GET', 'POST', 'PUT', 'DELETE']
+  }
+});
+
+// Expose io to routes via app locals
+app.set('io', io);
+
+// Socket basic wiring
+io.on('connection', (socket) => {
+  console.log('Socket connected:', socket.id);
+  // Optional: join a user room if client sends their userId
+  socket.on('user:join', (userId) => {
+    if (userId) {
+      socket.join(`user:${userId}`);
+      // console.log(`Socket ${socket.id} joined user:${userId}`);
+    }
+  });
+  socket.on('disconnect', () => {
+    // console.log('Socket disconnected:', socket.id);
+  });
+});
+
 // Mount routers
 app.use('/api/auth', authRoutes);
 app.use('/api/equipment', equipmentRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/users', userRoutes);
 
-// Add a simple route to verify the server is running
+// Simple route
 app.get('/', (req, res) => {
-  res.status(200).json({ 
-    success: true, 
-    message: 'Servix CMMS API is running' 
+  res.status(200).json({
+    success: true,
+    message: 'Servix CMMS API is running'
   });
 });
 
-// Handle 404 - Must be after all other routes
+// Handle 404
 app.use('*', (req, res) => {
   res.status(404).json({
     success: false,
@@ -60,25 +91,21 @@ app.use('*', (req, res) => {
   });
 });
 
-// Error handling middleware
+// Improved error handler
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({
+  const statusCode = res.statusCode && res.statusCode !== 200 ? res.statusCode : 500;
+  res.status(statusCode).json({
     success: false,
-    message: 'Something went wrong'
+    message: err.message || 'Something went wrong'
   });
 });
 
 const PORT = process.env.PORT || 5000;
 
-const server = app.listen(
-  PORT,
-  console.log(`Server running on port ${PORT}`)
-);
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err, promise) => {
+process.on('unhandledRejection', (err) => {
   console.log(`Error: ${err.message}`);
-  // Close server & exit process
   server.close(() => process.exit(1));
 });

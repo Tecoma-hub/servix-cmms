@@ -1,51 +1,92 @@
 // backend/models/Task.js
 const mongoose = require('mongoose');
 
-const TaskSchema = new mongoose.Schema({
+const taskSchema = new mongoose.Schema({
   title: {
     type: String,
-    required: [true, 'Please add a title'],
-    trim: true,
-    maxlength: [100, 'Title cannot be more than 100 characters']
+    required: true
   },
   description: {
     type: String,
-    required: [true, 'Please add a description'],
-    maxlength: [1000, 'Description cannot be more than 1000 characters']
+    default: ''
   },
-  status: {
+  taskType: {
     type: String,
-    enum: ['Pending', 'In Progress', 'Completed', 'On Hold'],
-    default: 'Pending'
+    enum: ['Repair', 'Install', 'Inspect', 'Assess', 'Calibrate'],
+    required: true
   },
   priority: {
     type: String,
     enum: ['Low', 'Medium', 'High', 'Urgent'],
     default: 'Medium'
   },
+  status: {
+    type: String,
+    enum: ['Pending', 'In Progress', 'Completed', 'Cancelled'],
+    default: 'Pending'
+  },
+  assignedTo: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  assignedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
   equipment: {
-    type: mongoose.Schema.ObjectId,
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'Equipment',
     required: true
   },
-  assignedTo: {
-    type: mongoose.Schema.ObjectId,
-    ref: 'User',
-    required: true
+  faultDescription: {
+    type: String,
+    default: ''
   },
+  comments: {
+    type: String,
+    default: ''
+  },
+  spareParts: [{
+    name: String,
+    quantity: Number,
+    description: String
+  }],
   dueDate: {
-    type: Date,
-    required: [true, 'Please add a due date']
+    type: Date
   },
-  createdBy: {
-    type: mongoose.Schema.ObjectId,
-    ref: 'User',
-    required: true
+  completedDate: {
+    type: Date
   },
   createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
     type: Date,
     default: Date.now
   }
 });
 
-module.exports = mongoose.model('Task', TaskSchema);
+// Update equipment status when task status changes
+taskSchema.pre('save', async function(next) {
+  if (this.isModified('status')) {
+    const Equipment = require('./Equipment');
+    
+    // When task is assigned, set equipment to Unserviceable
+    if (this.status === 'Pending' && this.isNew) {
+      await Equipment.findByIdAndUpdate(this.equipment, {
+        status: 'Unserviceable'
+      });
+    }
+    
+    // When task is completed or cancelled, don't change status here
+    // Technician will update equipment status after completion
+  }
+  
+  this.updatedAt = Date.now();
+  next();
+});
+
+module.exports = mongoose.model('Task', taskSchema);

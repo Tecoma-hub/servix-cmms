@@ -3,34 +3,32 @@ const User = require('../models/User');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../middleware/async');
 const jwt = require('jsonwebtoken');
-const { requestOTP, verifyOTP } = require('../utils/otpService');
+const { requestOTP, verifyOTP: checkOTP } = require('../utils/otpService');
 const preApprovedStaff = require('../config/preApprovedStaff');
 
-// @desc    Request OTP for login
+// @desc    Request OTP for login/registration
 // @route   POST /api/auth/request-otp
 // @access  Public
 exports.requestOTP = asyncHandler(async (req, res, next) => {
   const { serviceNumber } = req.body;
 
-  // Validate required field
   if (!serviceNumber) {
     return next(new ErrorResponse('Please provide service number', 400));
   }
 
   try {
-    // Find the staff member in the pre-approved list
-    const staffMember = preApprovedStaff.find(member => member.serviceNumber === serviceNumber);
+    // Find staff in pre-approved list
+    const staffMember = preApprovedStaff.find(
+      member => member.serviceNumber === serviceNumber
+    );
     if (!staffMember) {
       return next(new ErrorResponse('Service number not recognized', 400));
     }
 
-    // Check if user exists, if not create one
+    // Check if user exists, else create
     let user = await User.findOne({ serviceNumber });
     if (!user) {
-      // Generate email based on name
       const email = `${staffMember.name.toLowerCase().replace(/\s+/g, '.')}.hospital@medtrackcmms.com`;
-      
-      // Create user with auto-filled information
       user = await User.create({
         serviceNumber,
         name: staffMember.name,
@@ -41,9 +39,9 @@ exports.requestOTP = asyncHandler(async (req, res, next) => {
       });
     }
 
-    // Request OTP
+    // Send OTP
     await requestOTP(serviceNumber);
-    
+
     res.status(200).json({
       success: true,
       message: 'OTP sent to your phone number'
@@ -53,21 +51,26 @@ exports.requestOTP = asyncHandler(async (req, res, next) => {
   }
 });
 
-// @desc    Verify OTP and login
+// @desc    Verify OTP (works for both login and first-time registration)
 // @route   POST /api/auth/verify-otp
 // @access  Public
 exports.verifyOTP = asyncHandler(async (req, res, next) => {
   const { serviceNumber, otp } = req.body;
 
-  // Validate required fields
   if (!serviceNumber || !otp) {
     return next(new ErrorResponse('Please provide service number and OTP', 400));
   }
 
   try {
-    // Verify OTP
-    const user = await verifyOTP(serviceNumber, otp);
-    
+    // This will throw if OTP is invalid
+    await checkOTP(serviceNumber, otp);
+
+    // Find the user (should exist after requestOTP)
+    const user = await User.findOne({ serviceNumber });
+    if (!user) {
+      return next(new ErrorResponse('User not found after OTP verification', 404));
+    }
+
     // Update last login
     user.lastLogin = Date.now();
     await user.save();
