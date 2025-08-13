@@ -13,7 +13,7 @@ const UserList = ({ onSelect, selectedUserId }) => {
         setLoading(true);
         setError('');
         
-        const res = await api.get('/api/users');
+        const res = await api.get('/users');
         // Filter to show only technicians
         const technicians = Array.isArray(res.data.users) ? res.data.users.filter(user => user.role === 'Technician') : [];
         setUsers(technicians);

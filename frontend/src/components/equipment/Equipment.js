@@ -21,7 +21,7 @@ const Equipment = () => {
       try {
         setLoading(true);
         setError('');
-        
+        // Server now returns all fields needed by the UI
         const res = await api.get('/equipment');
         setEquipment(Array.isArray(res.data.equipment) ? res.data.equipment : []);
       } catch (err) {
@@ -37,39 +37,50 @@ const Equipment = () => {
   // Get unique departments and statuses for dropdowns
   const departments = useMemo(() => {
     if (!equipment || equipment.length === 0) return ['All Departments'];
-    const uniqueDepartments = [...new Set(equipment.map(item => item.department))];
+    const uniqueDepartments = [...new Set(equipment.map(item => item?.department).filter(Boolean))];
     return ['All Departments', ...uniqueDepartments.sort()];
   }, [equipment]);
 
   const statuses = useMemo(() => {
     if (!equipment || equipment.length === 0) return ['All Statuses'];
-    const uniqueStatuses = [...new Set(equipment.map(item => item.status))];
+    const uniqueStatuses = [...new Set(equipment.map(item => item?.status).filter(Boolean))];
     return ['All Statuses', ...uniqueStatuses.sort()];
   }, [equipment]);
 
   // Filter equipment based on search term, selected department, and selected status
   const filteredEquipment = useMemo(() => {
     return equipment.filter(item => {
-      const searchLower = searchTerm.toLowerCase();
-      
-      // Search across multiple fields
-      const matchesSearch = !searchTerm || 
-        item.name.toLowerCase().includes(searchLower) ||
-        (item.serialNumber && item.serialNumber.toLowerCase().includes(searchLower)) ||
-        (item.model && item.model.toLowerCase().includes(searchLower)) ||
-        (item.manufacturer && item.manufacturer.toLowerCase().includes(searchLower)) ||
-        (item.category && item.category.toLowerCase().includes(searchLower)) ||
-        (item.location && item.location.toLowerCase().includes(searchLower)) ||
-        item.status.toLowerCase().includes(searchLower);
-      
-      const matchesDepartment = !selectedDepartment || 
-                               selectedDepartment === 'All Departments' || 
-                               item.department === selectedDepartment;
-      
-      const matchesStatus = !selectedStatus || 
-                           selectedStatus === 'All Statuses' || 
-                           item.status === selectedStatus;
-      
+      const name = (item?.name || '').toLowerCase();
+      const serial = (item?.serialNumber || '').toLowerCase();
+      const model = (item?.model || '').toLowerCase();
+      const manufacturer = (item?.manufacturer || '').toLowerCase();
+      const category = (item?.category || '').toLowerCase();
+      const location = (item?.location || '').toLowerCase();
+      const status = (item?.status || '').toLowerCase();
+      const department = item?.department || '';
+
+      const searchLower = (searchTerm || '').toLowerCase();
+
+      const matchesSearch =
+        !searchTerm ||
+        name.includes(searchLower) ||
+        serial.includes(searchLower) ||
+        model.includes(searchLower) ||
+        manufacturer.includes(searchLower) ||
+        category.includes(searchLower) ||
+        location.includes(searchLower) ||
+        status.includes(searchLower);
+
+      const matchesDepartment =
+        !selectedDepartment ||
+        selectedDepartment === 'All Departments' ||
+        department === selectedDepartment;
+
+      const matchesStatus =
+        !selectedStatus ||
+        selectedStatus === 'All Statuses' ||
+        (item?.status || '') === selectedStatus;
+
       return matchesSearch && matchesDepartment && matchesStatus;
     });
   }, [equipment, searchTerm, selectedDepartment, selectedStatus]);
@@ -100,6 +111,7 @@ const Equipment = () => {
       case 'Auctioned':
         return 'bg-purple-600 text-white border border-purple-700';
       default:
+        // 'Under Maintenance' and any other custom statuses
         return 'bg-yellow-600 text-white border border-yellow-700';
     }
   };
@@ -110,7 +122,7 @@ const Equipment = () => {
       case 'Under Maintenance':
         return 'Unserviceable';
       default:
-        return status;
+        return status || 'Unknown';
     }
   };
 
@@ -131,44 +143,24 @@ const Equipment = () => {
     const maxVisiblePages = 5;
     
     if (totalPages <= maxVisiblePages) {
-      // Show all pages if total pages is less than or equal to maxVisiblePages
-      for (let i = 1; i <= totalPages; i++) {
-        pageNumbers.push(i);
-      }
+      for (let i = 1; i <= totalPages; i++) pageNumbers.push(i);
     } else {
-      // Show first page, last page, current page, and two pages on either side
       let startPage = Math.max(1, currentPage - 2);
       let endPage = Math.min(totalPages, currentPage + 2);
-      
-      // Adjust if we're near the beginning
-      if (currentPage <= 3) {
-        endPage = maxVisiblePages;
-      }
-      
-      // Adjust if we're near the end
-      if (currentPage >= totalPages - 2) {
-        startPage = totalPages - maxVisiblePages + 1;
-      }
-      
-      // Add pages
-      for (let i = startPage; i <= endPage; i++) {
-        pageNumbers.push(i);
-      }
-      
-      // Add ellipsis and first page if needed
-      if (startPage > 1) {
-        pageNumbers.unshift('...');
-        pageNumbers.unshift(1);
-      }
-      
-      // Add ellipsis and last page if needed
-      if (endPage < totalPages) {
-        pageNumbers.push('...');
-        pageNumbers.push(totalPages);
-      }
+      if (currentPage <= 3) endPage = maxVisiblePages;
+      if (currentPage >= totalPages - 2) startPage = totalPages - maxVisiblePages + 1;
+      for (let i = startPage; i <= endPage; i++) pageNumbers.push(i);
+      if (startPage > 1) { pageNumbers.unshift('...'); pageNumbers.unshift(1); }
+      if (endPage < totalPages) { pageNumbers.push('...'); pageNumbers.push(totalPages); }
     }
-    
     return pageNumbers;
+  };
+
+  // Safe date formatter (avoids "Invalid Date")
+  const formatDate = (d) => {
+    if (!d) return '—';
+    const dt = new Date(d);
+    return isNaN(dt.getTime()) ? '—' : dt.toLocaleDateString();
   };
 
   if (loading) {
@@ -332,36 +324,36 @@ const Equipment = () => {
               <div key={equip._id} className="bg-white shadow-lg rounded-2xl border border-slate-200 overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
                 <div className="p-6">
                   <div className="flex justify-between items-start mb-4">
-                    <h2 className="text-xl font-bold text-slate-800">{equip.name}</h2>
-                    <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium ${getStatusColor(equip.status)}`}>
-                      {getStatusText(equip.status)}
+                    <h2 className="text-xl font-bold text-slate-800">{equip?.name || 'Unnamed Equipment'}</h2>
+                    <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium ${getStatusColor(equip?.status)}`}>
+                      {getStatusText(equip?.status)}
                     </span>
                   </div>
                   
                   <div className="space-y-3">
                     <div className="flex justify-between">
                       <span className="text-sm text-slate-600">Serial Number:</span>
-                      <span className="text-sm font-medium text-slate-800">{equip.serialNumber}</span>
+                      <span className="text-sm font-medium text-slate-800">{equip?.serialNumber || '—'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-slate-600">Model:</span>
-                      <span className="text-sm font-medium text-slate-800">{equip.model}</span>
+                      <span className="text-sm font-medium text-slate-800">{equip?.model || '—'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-slate-600">Manufacturer:</span>
-                      <span className="text-sm font-medium text-slate-800">{equip.manufacturer}</span>
+                      <span className="text-sm font-medium text-slate-800">{equip?.manufacturer || '—'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-slate-600">Department:</span>
-                      <span className="text-sm font-medium text-slate-800">{equip.department}</span>
+                      <span className="text-sm font-medium text-slate-800">{equip?.department || '—'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-slate-600">Location:</span>
-                      <span className="text-sm font-medium text-slate-800">{equip.location}</span>
+                      <span className="text-sm font-medium text-slate-800">{equip?.location || '—'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-slate-600">Category:</span>
-                      <span className="text-sm font-medium text-slate-800">{equip.category}</span>
+                      <span className="text-sm font-medium text-slate-800">{equip?.category || '—'}</span>
                     </div>
                   </div>
                 </div>
@@ -369,12 +361,12 @@ const Equipment = () => {
                 <div className="bg-slate-50 px-6 py-4 border-t border-slate-200">
                   <div className="flex justify-between text-sm text-slate-600">
                     <span>Installed:</span>
-                    <span className="font-medium">{new Date(equip.installationDate).toLocaleDateString()}</span>
+                    <span className="font-medium">{formatDate(equip?.installationDate)}</span>
                   </div>
-                  {equip.warrantyExpiry && (
+                  {equip?.warrantyExpiry && (
                     <div className="flex justify-between text-sm text-slate-600 mt-2">
                       <span>Warranty Expiry:</span>
-                      <span className="font-medium">{new Date(equip.warrantyExpiry).toLocaleDateString()}</span>
+                      <span className="font-medium">{formatDate(equip?.warrantyExpiry)}</span>
                     </div>
                   )}
                 </div>
@@ -398,9 +390,7 @@ const Equipment = () => {
                   currentPage === 1 ? 'bg-slate-100 cursor-not-allowed' : ''
                 }`}
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-6-6a2 2 0 00-2-2v6a2 2 0 002 2h6zM3 19a2 2 0 002 2h14a2 2 0 002-2v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6z" />
-                </svg>
+                Prev
               </button>
               
               {getPageNumbers().map((pageNumber, index) => (
@@ -428,9 +418,7 @@ const Equipment = () => {
                   currentPage === totalPages ? 'bg-slate-100 cursor-not-allowed' : ''
                 }`}
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2V6" />
-                </svg>
+                Next
               </button>
             </nav>
           </div>

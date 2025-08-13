@@ -1,20 +1,22 @@
 // frontend/src/components/routing/PrivateRoute.js
 import React from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 
-const PrivateRoute = ({ user, role, children }) => {
-  // If no user is logged in, redirect to login
+const PrivateRoute = ({ children, user, role }) => {
+  const location = useLocation();
+
+  // If no user is logged in, redirect to login with the current path saved
   if (!user) {
-    return <Navigate to="/login" />;
+    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   }
 
-  // If role is specified and user doesn't have the required role, redirect to dashboard
+  // If role-based restriction exists
   if (role && user.role !== role) {
-    return <Navigate to="/dashboard" />;
+    return <Navigate to="/dashboard" replace />;
   }
 
-  // If children are provided, render them, otherwise render the Outlet (for nested routes)
-  return children || <Outlet />;
+  // Otherwise, render the protected component
+  return children;
 };
 
 export default PrivateRoute;

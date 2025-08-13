@@ -5,277 +5,275 @@ import api from '../../utils/api';
 const AddEquipment = ({ onEquipmentAdded }) => {
   const [formData, setFormData] = useState({
     name: '',
+    status: 'Serviceable',
     manufacturer: '',
     model: '',
     serialNumber: '',
-    status: 'Serviceable',
-    installationDate: '',
-    warrantyExpiry: '',
     department: '',
     location: '',
-    category: 'Diagnostic',
-    notes: ''
+    installationDate: '',
+    warrantyExpiry: '',
+    category: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
-  const handleChange = (e) => {
+  const {
+    name,
+    status,
+    manufacturer,
+    model,
+    serialNumber,
+    department,
+    location,
+    installationDate,
+    warrantyExpiry,
+    category
+  } = formData;
+
+  const onChange = (e) =>
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+
+  const resetForm = () => {
     setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
+      name: '',
+      status: 'Serviceable',
+      manufacturer: '',
+      model: '',
+      serialNumber: '',
+      department: '',
+      location: '',
+      installationDate: '',
+      warrantyExpiry: '',
+      category: ''
     });
   };
 
-  const handleSubmit = async (e) => {
+  const onSubmit = async (e) => {
     e.preventDefault();
-    try {
-      setLoading(true);
-      setError('');
-      
-      // Validate required fields
-      if (!formData.name || !formData.manufacturer || !formData.model || !formData.serialNumber || !formData.installationDate) {
-        throw new Error('Please fill in all required fields');
-      }
 
-      const res = await api.post('/equipment', formData);
-      
-      // Reset form
-      setFormData({
-        name: '',
-        manufacturer: '',
-        model: '',
-        serialNumber: '',
-        status: 'Serviceable',
-        installationDate: '',
-        warrantyExpiry: '',
-        department: '',
-        location: '',
-        category: 'Diagnostic',
-        notes: ''
-      });
-      
-      // Notify parent component
-      if (onEquipmentAdded) {
-        onEquipmentAdded(res.data.equipment);
+    // Validate required fields
+    if (
+      !name ||
+      !status ||
+      !manufacturer ||
+      !model ||
+      !serialNumber ||
+      !department ||
+      !location ||
+      !installationDate ||
+      !category
+    ) {
+      setError('Please fill in all required fields');
+      setSuccess('');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const response = await api.post('/equipment', formData);
+
+      if (response.status === 201) {
+        setSuccess('Equipment added successfully!');
+        resetForm();
+        if (onEquipmentAdded) {
+          onEquipmentAdded(response.data);
+        }
+      } else {
+        setError('Unexpected response from server');
       }
-      
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Failed to add equipment');
+      setError(err.response?.data?.message || 'Failed to add equipment');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="bg-white shadow rounded-lg p-6 mb-8">
-      <h2 className="text-xl font-bold text-gray-900 mb-6">Add New Equipment</h2>
-      
+    <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-6">
+      <h2 className="text-2xl font-bold text-slate-800 mb-6">Add New Equipment</h2>
+
       {error && (
-        <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-800 rounded">
+        <div className="mb-4 p-3 bg-red-100 border border-red-200 text-red-700 rounded-lg">
           {error}
         </div>
       )}
-      
-      <form onSubmit={handleSubmit} className="space-y-6">
+
+      {success && (
+        <div className="mb-4 p-3 bg-green-100 border border-green-200 text-green-700 rounded-lg">
+          {success}
+        </div>
+      )}
+
+      <form onSubmit={onSubmit}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Basic Information */}
+          {/* Left Column */}
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
                 Equipment Name *
               </label>
               <input
                 type="text"
                 name="name"
-                value={formData.name}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={name}
+                onChange={onChange}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Enter equipment name"
-                required
               />
             </div>
-            
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Manufacturer (Brand) *
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Manufacturer *
               </label>
               <input
                 type="text"
                 name="manufacturer"
-                value={formData.manufacturer}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter manufacturer"
-                required
+                value={manufacturer}
+                onChange={onChange}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter manufacturer name"
               />
             </div>
-            
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
                 Model *
               </label>
               <input
                 type="text"
                 name="model"
-                value={formData.model}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter model"
-                required
+                value={model}
+                onChange={onChange}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter model number"
               />
             </div>
-            
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
                 Serial Number *
               </label>
               <input
                 type="text"
                 name="serialNumber"
-                value={formData.serialNumber}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={serialNumber}
+                onChange={onChange}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Enter serial number"
-                required
               />
             </div>
           </div>
-          
-          {/* Installation and Status */}
+
+          {/* Right Column */}
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Status *
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Department *
+              </label>
+              <input
+                type="text"
+                name="department"
+                value={department}
+                onChange={onChange}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter department"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Location *
+              </label>
+              <input
+                type="text"
+                name="location"
+                value={location}
+                onChange={onChange}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter location"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Installation Date *
+              </label>
+              <input
+                type="date"
+                name="installationDate"
+                value={installationDate}
+                onChange={onChange}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Warranty Expiry
+              </label>
+              <input
+                type="date"
+                name="warrantyExpiry"
+                value={warrantyExpiry}
+                onChange={onChange}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Status
               </label>
               <select
                 name="status"
-                value={formData.status}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
+                value={status}
+                onChange={onChange}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="Serviceable">Serviceable</option>
+                <option value="Under Maintenance">Under Maintenance</option>
                 <option value="Unserviceable">Unserviceable</option>
                 <option value="Decommissioned">Decommissioned</option>
                 <option value="Auctioned">Auctioned</option>
               </select>
             </div>
-            
+
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Date of Installation *
-              </label>
-              <input
-                type="date"
-                name="installationDate"
-                value={formData.installationDate}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Warranty Due Date
-              </label>
-              <input
-                type="date"
-                name="warrantyExpiry"
-                value={formData.warrantyExpiry}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Department
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Category *
               </label>
               <input
                 type="text"
-                name="department"
-                value={formData.department}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter department"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Location
-              </label>
-              <input
-                type="text"
-                name="location"
-                value={formData.location}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter location"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Category
-              </label>
-              <select
                 name="category"
-                value={formData.category}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="Diagnostic">Diagnostic</option>
-                <option value="Therapeutic">Therapeutic</option>
-                <option value="Monitoring">Monitoring</option>
-                <option value="Support">Support</option>
-              </select>
+                value={category}
+                onChange={onChange}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter category"
+              />
             </div>
           </div>
         </div>
-        
-        {/* Comments Section */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Comments / Notes
-          </label>
-          <textarea
-            name="notes"
-            value={formData.notes}
-            onChange={handleChange}
-            rows="3"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Enter any additional notes or comments about the equipment"
-          ></textarea>
-        </div>
-        
-        <div className="flex justify-end space-x-4">
-          <button
-            type="button"
-            onClick={() => setFormData({
-              name: '',
-              manufacturer: '',
-              model: '',
-              serialNumber: '',
-              status: 'Operational',
-              installationDate: '',
-              warrantyExpiry: '',
-              department: '',
-              location: '',
-              category: 'Diagnostic',
-              notes: ''
-            })}
-            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-          >
-            Reset
-          </button>
+
+        <div className="mt-8 flex justify-end">
           <button
             type="submit"
             disabled={loading}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-8 py-3 bg-gradient-to-r from-blue-600 to-green-500 text-white font-medium rounded-xl hover:from-blue-700 hover:to-green-600 transition-all duration-200 transform hover:scale-105 disabled:opacity-70"
           >
-            {loading ? 'Adding...' : 'Add Equipment'}
+            {loading ? (
+              <div className="flex items-center">
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                Adding Equipment...
+              </div>
+            ) : (
+              'Add Equipment'
+            )}
           </button>
         </div>
       </form>
