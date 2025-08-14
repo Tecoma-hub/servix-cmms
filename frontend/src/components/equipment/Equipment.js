@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import AddEquipment from './AddEquipment';
 import api from '../../utils/api';
+import socket from '../../utils/socket'; // ✅ real-time
 
 const Equipment = () => {
   const [equipment, setEquipment] = useState([]);
@@ -21,7 +22,7 @@ const Equipment = () => {
       try {
         setLoading(true);
         setError('');
-        // Server now returns all fields needed by the UI
+        
         const res = await api.get('/equipment');
         setEquipment(Array.isArray(res.data.equipment) ? res.data.equipment : []);
       } catch (err) {
@@ -32,6 +33,31 @@ const Equipment = () => {
     };
 
     fetchEquipment();
+  }, []);
+
+  // ✅ Real-time updates from server
+  useEffect(() => {
+    const onEqUpdated = ({ equipment: updated }) => {
+      if (!updated?._id) return;
+      setEquipment(prev => {
+        const idx = prev.findIndex(e => e._id === updated._id);
+        if (idx === -1) return prev; // Not in current list; skip (or append if desired)
+        const clone = [...prev];
+        clone[idx] = { ...clone[idx], ...updated };
+        return clone;
+      });
+    };
+
+    const onEqDeleted = ({ id }) => {
+      setEquipment(prev => prev.filter(e => e._id !== id));
+    };
+
+    socket.on('equipment:updated', onEqUpdated);
+    socket.on('equipment:deleted', onEqDeleted);
+    return () => {
+      socket.off('equipment:updated', onEqUpdated);
+      socket.off('equipment:deleted', onEqDeleted);
+    };
   }, []);
 
   // Get unique departments and statuses for dropdowns
@@ -58,11 +84,10 @@ const Equipment = () => {
       const location = (item?.location || '').toLowerCase();
       const status = (item?.status || '').toLowerCase();
       const department = item?.department || '';
-
+      
       const searchLower = (searchTerm || '').toLowerCase();
-
-      const matchesSearch =
-        !searchTerm ||
+      
+      const matchesSearch = !searchTerm || 
         name.includes(searchLower) ||
         serial.includes(searchLower) ||
         model.includes(searchLower) ||
@@ -70,17 +95,15 @@ const Equipment = () => {
         category.includes(searchLower) ||
         location.includes(searchLower) ||
         status.includes(searchLower);
-
-      const matchesDepartment =
-        !selectedDepartment ||
-        selectedDepartment === 'All Departments' ||
-        department === selectedDepartment;
-
-      const matchesStatus =
-        !selectedStatus ||
-        selectedStatus === 'All Statuses' ||
-        (item?.status || '') === selectedStatus;
-
+      
+      const matchesDepartment = !selectedDepartment || 
+                               selectedDepartment === 'All Departments' || 
+                               department === selectedDepartment;
+      
+      const matchesStatus = !selectedStatus || 
+                           selectedStatus === 'All Statuses' || 
+                           (item?.status || '') === selectedStatus;
+      
       return matchesSearch && matchesDepartment && matchesStatus;
     });
   }, [equipment, searchTerm, selectedDepartment, selectedStatus]);
@@ -111,7 +134,6 @@ const Equipment = () => {
       case 'Auctioned':
         return 'bg-purple-600 text-white border border-purple-700';
       default:
-        // 'Under Maintenance' and any other custom statuses
         return 'bg-yellow-600 text-white border border-yellow-700';
     }
   };
@@ -124,6 +146,13 @@ const Equipment = () => {
       default:
         return status || 'Unknown';
     }
+  };
+
+  // Safe date formatter
+  const formatDate = (d) => {
+    if (!d) return '—';
+    const dt = new Date(d);
+    return isNaN(dt.getTime()) ? '—' : dt.toLocaleDateString();
   };
 
   // Handle equipment added
@@ -143,24 +172,29 @@ const Equipment = () => {
     const maxVisiblePages = 5;
     
     if (totalPages <= maxVisiblePages) {
-      for (let i = 1; i <= totalPages; i++) pageNumbers.push(i);
+      for (let i = 1; i <= totalPages; i++) {
+        pageNumbers.push(i);
+      }
     } else {
       let startPage = Math.max(1, currentPage - 2);
       let endPage = Math.min(totalPages, currentPage + 2);
+      
       if (currentPage <= 3) endPage = maxVisiblePages;
       if (currentPage >= totalPages - 2) startPage = totalPages - maxVisiblePages + 1;
+      
       for (let i = startPage; i <= endPage; i++) pageNumbers.push(i);
-      if (startPage > 1) { pageNumbers.unshift('...'); pageNumbers.unshift(1); }
-      if (endPage < totalPages) { pageNumbers.push('...'); pageNumbers.push(totalPages); }
+      
+      if (startPage > 1) {
+        pageNumbers.unshift('...');
+        pageNumbers.unshift(1);
+      }
+      if (endPage < totalPages) {
+        pageNumbers.push('...');
+        pageNumbers.push(totalPages);
+      }
     }
+    
     return pageNumbers;
-  };
-
-  // Safe date formatter (avoids "Invalid Date")
-  const formatDate = (d) => {
-    if (!d) return '—';
-    const dt = new Date(d);
-    return isNaN(dt.getTime()) ? '—' : dt.toLocaleDateString();
   };
 
   if (loading) {
@@ -216,7 +250,7 @@ const Equipment = () => {
             <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
               {/* Search */}
               <div className="relative flex-1 min-w-64">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <div className="absolute inset-y-0 left-0 pl-3 flex itemscenter pointer-events-none">
                   <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>

@@ -1,216 +1,243 @@
 // backend/routes/tasks.js
-
 const express = require('express');
 const router = express.Router();
 const asyncHandler = require('express-async-handler');
-const { protect } = require('../middleware/auth');
+const { protect, authorize } = require('../middleware/auth');
 const Task = require('../models/Task');
 const Equipment = require('../models/Equipment');
-const User = require('../models/User');
-const { sendSMS } = require('../utils/notify');  // ✅ new
 
-// Create a New Task
-router.post('/', protect, asyncHandler(async (req, res) => {
-  const { title, description, taskType, priority, assignedTo, equipment, dueDate } = req.body;
+// GET /api/tasks
+// Techs: only their tasks. Engineers/Admins: all (or ?my=1 for own).
+// Optional ?equipmentId=
+router.get(
+  '/',
+  protect,
+  asyncHandler(async (req, res) => {
+    const { equipmentId, my } = req.query;
 
-  if (!['Admin', 'Engineer'].includes(req.user.role)) {
-    return res.status(403).json({ message: 'Not authorized to assign tasks' });
-  }
+    const filter = {};
+    if (equipmentId) filter.equipment = equipmentId;
 
-  // Validate minimum required inputs
-  if (!title) return res.status(400).json({ message: 'Title is required' });
-  if (!taskType) return res.status(400).json({ message: 'taskType is required' });
-  if (!equipment) return res.status(400).json({ message: 'equipment is required' });
-
-  const validTaskTypes = ['Repair', 'Install', 'Inspect', 'Assess', 'Calibrate'];
-  if (!validTaskTypes.includes(taskType)) {
-    return res.status(400).json({ message: `Invalid taskType. Allowed: ${validTaskTypes.join(', ')}` });
-  }
-
-  const equipmentExists = await Equipment.findById(equipment);
-  if (!equipmentExists) {
-    return res.status(404).json({ message: 'Equipment not found' });
-  }
-
-  // assignedTo is optional
-  let assignedToId = null;
-  let assignee = null;
-  if (assignedTo) {
-    assignee = await User.findById(assignedTo);
-    if (!assignee || assignee.role !== 'Technician') {
-      return res.status(404).json({ message: 'Technician not found' });
+    if (req.user.role === 'Technician' || my === '1') {
+      filter.assignedTo = req.user._id;
     }
-    assignedToId = assignee._id;
-  }
 
-  const task = await Task.create({
-    title,
-    description,
-    taskType,
-    priority,
-    assignedTo: assignedToId,
-    assignedBy: req.user._id,
-    equipment,
-    dueDate,
-    createdBy: req.user._id
-  });
+    const tasks = await Task.find(filter)
+      .populate('assignedTo', 'name role')
+      .populate('assignedBy', 'name role')
+      .populate('equipment', 'name serialNumber status')
+      .sort({ createdAt: -1 });
 
-  // Populate for nicer payloads
-  const fullTask = await Task.findById(task._id)
-    .populate('assignedTo', 'name email role phone')
-    .populate('assignedBy', 'name role')
-    .populate('equipment', 'name serialNumber status');
+    res.json({ success: true, tasks });
+  })
+);
 
-  // ✅ Socket emit: notify the assignee in real-time
-  const io = req.app.get('io');
-  if (assignedToId && io) {
-    io.to(`user:${assignedToId.toString()}`).emit('task:assigned', { task: fullTask });
-  }
+// POST /api/tasks  (assign)
+router.post(
+  '/',
+  protect,
+  authorize('Engineer', 'Admin'),
+  asyncHandler(async (req, res) => {
+    const {
+      title,
+      description,
+      taskType,
+      pmType,
+      pmInterval,
+      priority = 'Low',
+      assignedTo,
+      equipment,
+      dueDate
+    } = req.body;
 
-  // ✅ SMS notify (if phone present)
-  if (assignee?.phone) {
-    const body = `New task assigned: ${fullTask.title} (${fullTask.taskType}). Priority: ${fullTask.priority}.`;
-    sendSMS(assignee.phone, body).catch(() => {});
-  }
+    if (!title || !taskType || !equipment || !dueDate) {
+      return res.status(400).json({ message: 'Title, Task Type, Equipment and Due Date are required.' });
+    }
 
-  res.status(201).json({ success: true, task: fullTask });
-}));
+    if (taskType === 'Preventive' && (!pmType || !pmInterval)) {
+      return res.status(400).json({ message: 'PM Type and Periodic Interval are required for Preventive tasks.' });
+    }
 
-// Get All Tasks
-router.get('/', protect, asyncHandler(async (req, res) => {
-  let query = {};
-  if (req.user.role === 'Technician') {
-    query.assignedTo = req.user._id;
-  }
+    const payload = {
+      title,
+      description,
+      taskType,
+      priority,
+      assignedBy: req.user._id,
+      equipment,
+      dueDate,
+      createdBy: req.user._id
+    };
+    if (assignedTo) payload.assignedTo = assignedTo;
+    if (taskType === 'Preventive') {
+      payload.pmType = pmType;
+      payload.pmInterval = pmInterval;
+      payload.isPreventive = true;
+    }
 
-  const tasks = await Task.find(query)
-    .populate('assignedTo', 'name email role')
-    .populate('assignedBy', 'name role')
-    .populate('equipment', 'name serialNumber status')
-    .sort({ createdAt: -1 });
+    // When assigning, set initial equipment status business rule
+    // (Install => keep Serviceable; others => Under Maintenance)
+    const created = await Task.create(payload);
 
-  res.status(200).json({ success: true, count: tasks.length, tasks });
-}));
+    // Apply initial equipment flag on assign
+    try {
+      const eq = await Equipment.findById(equipment);
+      if (eq) {
+        if (taskType === 'Install') {
+          // keep as is or ensure Serviceable
+          if (eq.status !== 'Serviceable') {
+            eq.status = 'Serviceable';
+            await eq.save();
+          }
+        } else {
+          if (eq.status !== 'Under Maintenance') {
+            eq.status = 'Under Maintenance';
+            await eq.save();
+          }
+        }
+      }
+    } catch (_) {}
 
-// Get Task by ID
-router.get('/:id', protect, asyncHandler(async (req, res) => {
-  const task = await Task.findById(req.params.id)
-    .populate('assignedTo', 'name email role')
-    .populate('assignedBy', 'name role')
-    .populate('equipment', 'name serialNumber status department location');
+    // Socket broadcast
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('tasks:created', created._id);
+        io.emit('equipment:updated', equipment);
+      }
+    } catch (_) {}
 
-  if (!task) {
-    return res.status(404).json({ message: 'Task not found' });
-  }
+    res.status(201).json({ success: true, task: created });
+  })
+);
 
-  const assignedToId = task.assignedTo ? task.assignedTo._id?.toString() : null;
-  if (req.user.role === 'Technician' && assignedToId !== req.user._id.toString()) {
-    return res.status(403).json({ message: 'Not authorized to view this task' });
-  }
+// PUT /api/tasks/:id/status
+// Tech can update own task -> marks awaitingCertification=true
+// Engineer/Admin can also change; still requires certification to affect inventory.
+router.put(
+  '/:id/status',
+  protect,
+  asyncHandler(async (req, res) => {
+    const { status } = req.body;
+    const validStatuses = ['Pending', 'In Progress', 'Completed', 'Cancelled'];
+    if (!validStatuses.includes(status)) return res.status(400).json({ message: 'Invalid status' });
 
-  res.status(200).json({ success: true, task });
-}));
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ message: 'Task not found' });
 
-// Update Task (Technicians Only)
-router.put('/:id', protect, asyncHandler(async (req, res) => {
-  const task = await Task.findById(req.params.id);
+    // Tech can only update own tasks
+    if (req.user.role === 'Technician' && String(task.assignedTo) !== String(req.user._id)) {
+      return res.status(403).json({ message: 'Not allowed' });
+    }
 
-  if (!task) {
-    return res.status(404).json({ message: 'Task not found' });
-  }
-
-  if (!task.assignedTo || task.assignedTo.toString() !== req.user._id.toString()) {
-    return res.status(403).json({ message: 'Not authorized to update this task' });
-  }
-
-  if (['Completed', 'Cancelled'].includes(task.status)) {
-    return res.status(400).json({ message: 'Cannot update completed or cancelled tasks' });
-  }
-
-  const { faultDescription, comments, spareParts, status } = req.body;
-  if (faultDescription !== undefined) task.faultDescription = faultDescription;
-  if (comments !== undefined) task.comments = comments;
-  if (spareParts !== undefined) task.spareParts = spareParts;
-  if (status) {
+    // Update task status; DO NOT touch equipment here.
     task.status = status;
-    if (status === 'Completed') task.completedDate = Date.now();
-  }
-
-  const updatedTask = await task.save();
-
-  // Notify assignee (self) via socket
-  const io = req.app.get('io');
-  if (io && updatedTask.assignedTo) {
-    io.to(`user:${updatedTask.assignedTo.toString()}`).emit('task:updated', {
-      taskId: updatedTask._id.toString(),
-      status: updatedTask.status
-    });
-  }
-
-  res.status(200).json({ success: true, task: updatedTask });
-}));
-
-// Update Task Status (PUT /api/tasks/:id/status)
-router.put('/:id/status', protect, asyncHandler(async (req, res) => {
-  const { status } = req.body;
-  const validStatuses = ['Pending', 'In Progress', 'Completed', 'Cancelled'];
-
-  if (!validStatuses.includes(status)) {
-    return res.status(400).json({ message: 'Invalid status value' });
-  }
-
-  const task = await Task.findById(req.params.id);
-  if (!task) {
-    return res.status(404).json({ message: 'Task not found' });
-  }
-
-  const userIdStr = req.user._id.toString();
-  const assignedToStr = task.assignedTo ? task.assignedTo.toString() : null;
-
-  if (req.user.role === 'Technician') {
-    if (!assignedToStr || assignedToStr !== userIdStr) {
-      return res.status(403).json({ message: 'Not authorized to update this task' });
+    task.awaitingCertification = true;
+    task.certified = false;
+    if (status === 'Completed') {
+      task.completedDate = new Date();
+    } else if (status === 'Cancelled' || status === 'Pending' || status === 'In Progress') {
+      task.completedDate = null;
     }
-  }
+    await task.save();
 
-  if (['Completed', 'Cancelled'].includes(task.status)) {
-    return res.status(400).json({ message: 'Cannot update completed or cancelled tasks' });
-  }
+    try {
+      const io = req.app.get('io');
+      if (io) io.emit('tasks:updated', task._id);
+    } catch (_) {}
 
-  const updatedTask = await Task.findByIdAndUpdate(
-    req.params.id,
-    { $set: { status, completedDate: status === 'Completed' ? Date.now() : null } },
-    { new: true, runValidators: false }
-  )
-    .populate('assignedTo', 'name email role')
-    .populate('assignedBy', 'name role')
-    .populate('equipment', 'name serialNumber status');
+    // Return populated version
+    const updated = await Task.findById(task._id)
+      .populate('assignedTo', 'name role')
+      .populate('assignedBy', 'name role')
+      .populate('equipment', 'name serialNumber status');
 
-  // Socket notify assignee
-  const io = req.app.get('io');
-  if (io && updatedTask?.assignedTo?._id) {
-    io.to(`user:${updatedTask.assignedTo._id.toString()}`).emit('task:updated', {
-      taskId: updatedTask._id.toString(),
-      status: updatedTask.status
-    });
-  }
+    res.json({ success: true, task: updated });
+  })
+);
 
-  res.status(200).json({ success: true, task: updatedTask });
-}));
+// PUT /api/tasks/:id  (save work details: fault/repair/spares)
+router.put(
+  '/:id',
+  protect,
+  asyncHandler(async (req, res) => {
+    const task = await Task.findById(req.params.id);
+    if (!task) return res.status(404).json({ message: 'Task not found' });
 
-// Delete Task (Admin/Engineer)
-router.delete('/:id', protect, asyncHandler(async (req, res) => {
-  if (!['Admin', 'Engineer'].includes(req.user.role)) {
-    return res.status(403).json({ message: 'Not authorized to delete tasks' });
-  }
+    if (req.user.role === 'Technician' && String(task.assignedTo) !== String(req.user._id)) {
+      return res.status(403).json({ message: 'Not allowed' });
+    }
 
-  const task = await Task.findById(req.params.id);
-  if (!task) {
-    return res.status(404).json({ message: 'Task not found' });
-  }
+    const { faultDescription, repairDetails, spareParts } = req.body;
+    if (faultDescription !== undefined) task.faultDescription = faultDescription;
+    if (repairDetails !== undefined) task.repairDetails = repairDetails;
+    if (Array.isArray(spareParts)) task.spareParts = spareParts;
 
-  await task.remove();
-  res.status(200).json({ success: true, message: 'Task deleted' });
-}));
+    await task.save();
+
+    try {
+      const io = req.app.get('io');
+      if (io) io.emit('tasks:updated', task._id);
+    } catch (_) {}
+
+    const updated = await Task.findById(task._id)
+      .populate('assignedTo', 'name role')
+      .populate('assignedBy', 'name role')
+      .populate('equipment', 'name serialNumber status');
+
+    res.json({ success: true, task: updated });
+  })
+);
+
+// PUT /api/tasks/:id/certify
+// Engineer/Admin confirms change and applies mapping to the inventory.
+router.put(
+  '/:id/certify',
+  protect,
+  authorize('Engineer', 'Admin'),
+  asyncHandler(async (req, res) => {
+    const task = await Task.findById(req.params.id).populate('equipment');
+    if (!task) return res.status(404).json({ message: 'Task not found' });
+
+    // Apply equipment status mapping based on current task.status
+    let nextEqStatus = task.equipment?.status;
+
+    if (task.status === 'Pending' || task.status === 'In Progress') {
+      nextEqStatus = 'Under Maintenance';
+    } else if (task.status === 'Completed') {
+      nextEqStatus = 'Serviceable';
+    } else if (task.status === 'Cancelled') {
+      nextEqStatus = 'Decommissioned';
+    }
+
+    // Persist equipment update
+    if (task.equipment && nextEqStatus && task.equipment.status !== nextEqStatus) {
+      task.equipment.status = nextEqStatus;
+      await task.equipment.save();
+    }
+
+    // Mark certified
+    task.certified = true;
+    task.awaitingCertification = false;
+    task.certifiedAt = new Date();
+    task.certifiedBy = req.user._id;
+    await task.save();
+
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('tasks:updated', task._id);
+        if (task.equipment?._id) io.emit('equipment:updated', String(task.equipment._id));
+      }
+    } catch (_) {}
+
+    const updated = await Task.findById(task._id)
+      .populate('assignedTo', 'name role')
+      .populate('assignedBy', 'name role')
+      .populate('equipment', 'name serialNumber status');
+
+    res.json({ success: true, task: updated });
+  })
+);
 
 module.exports = router;

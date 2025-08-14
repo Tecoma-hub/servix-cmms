@@ -1,11 +1,40 @@
 // frontend/src/components/layout/Sidebar.js
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import axios from 'axios';
 import { Home, Box, Wrench, ListTodo, Users, Settings, BarChart2, FileText } from 'lucide-react';
 
 const Sidebar = () => {
   const location = useLocation();
   const currentPage = location.pathname.split('/')[1] || 'dashboard';
+
+  // Live user from API (fixes stale localStorage issue)
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const fetchMe = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          // fallback to localStorage user object if present
+          const fallback = JSON.parse(localStorage.getItem('user') || 'null');
+          setUser(fallback);
+          return;
+        }
+        const res = await axios.get('http://localhost:5000/api/auth/me', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setUser(res.data?.user || null);
+        // keep localStorage in sync so other parts using it don't break
+        if (res.data?.user) localStorage.setItem('user', JSON.stringify(res.data.user));
+      } catch (err) {
+        // graceful fallback
+        const fallback = JSON.parse(localStorage.getItem('user') || 'null');
+        setUser(fallback);
+      }
+    };
+    fetchMe();
+  }, []);
 
   // Define navigation items
   const navItems = [
@@ -17,6 +46,8 @@ const Sidebar = () => {
     { path: 'reports', label: 'Reports', icon: FileText },
     { path: 'settings', label: 'Settings', icon: Settings }
   ];
+
+  const initial = (user?.name?.charAt(0) || 'U').toUpperCase();
 
   return (
     <div className="bg-white text-slate-800 w-64 min-h-screen border-r border-slate-200 shadow-lg flex flex-col">
@@ -41,28 +72,24 @@ const Sidebar = () => {
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentPage === item.path;
-            
+
             return (
               <li key={item.path}>
                 <Link
                   to={`/${item.path}`}
                   className={`flex items-center space-x-3 py-3 px-4 rounded-xl transition-all duration-200 group ${
-                    isActive 
-                      ? 'bg-gradient-to-r from-blue-600 to-green-500 text-white shadow-md' 
+                    isActive
+                      ? 'bg-gradient-to-r from-blue-600 to-green-500 text-white shadow-md'
                       : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
                   }`}
                 >
-                  <Icon 
+                  <Icon
                     className={`w-5 h-5 transition-transform duration-200 ${
-                      isActive 
-                        ? 'text-white' 
-                        : 'text-slate-500 group-hover:text-blue-600'
-                    }`} 
+                      isActive ? 'text-white' : 'text-slate-500 group-hover:text-blue-600'
+                    }`}
                   />
                   <span className="font-medium">{item.label}</span>
-                  {isActive && (
-                    <div className="ml-auto w-2 h-2 bg-white rounded-full"></div>
-                  )}
+                  {isActive && <div className="ml-auto w-2 h-2 bg-white rounded-full"></div>}
                 </Link>
               </li>
             );
@@ -70,18 +97,18 @@ const Sidebar = () => {
         </ul>
       </nav>
 
-      {/* User Profile */}
+      {/* User Profile (now shows correct logged-in user) */}
       <div className="p-4 border-t border-slate-200 bg-slate-50">
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-green-500 rounded-full flex items-center justify-center text-white font-bold">
-            {localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).name.charAt(0) : 'U'}
+            {initial}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-slate-800 truncate">
-              {localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).name : 'User'}
+              {user?.name || 'User'}
             </p>
             <p className="text-xs text-slate-500 truncate">
-              {localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).role : 'Staff'}
+              {user?.role || 'Staff'}
             </p>
           </div>
         </div>
