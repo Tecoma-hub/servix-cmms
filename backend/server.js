@@ -9,12 +9,13 @@ const mongoose = require('mongoose');
 const morgan = require('morgan');
 
 // Routes
-const authRoutes = require('./routes/auth');           // if present in your project
+const authRoutes = require('./routes/auth');           // if present
 const userRoutes = require('./routes/users');
 const equipmentRoutes = require('./routes/equipment');
 const taskRoutes = require('./routes/tasks');
 const dashboardRoutes = require('./routes/dashboard');
-const reportRoutes = require('./routes/reports');      // <- NEW
+const reportRoutes = require('./routes/reports');      // report generator endpoints
+const settingsRoutes = require('./routes/settings');   // ✅ NEW: settings save endpoints
 
 const app = express();
 const server = http.createServer(app);
@@ -31,9 +32,6 @@ const io = new Server(server, {
 app.set('io', io);
 
 io.on('connection', (socket) => {
-  // simple logging + room pattern if needed later
-  // const userId = socket.handshake.auth?.userId;
-  // if (userId) socket.join(`user:${userId}`);
   socket.emit('connected', { ok: true });
   socket.on('disconnect', () => {});
 });
@@ -65,12 +63,13 @@ if (process.env.NODE_ENV !== 'production') {
 app.use('/downloads', express.static(path.join(process.cwd(), 'downloads')));
 
 // --- API routes ---
-app.use('/api/auth', authRoutes);            // if present in your project
+if (authRoutes) app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/equipment', equipmentRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/reports', reportRoutes);       // <- NEW
+app.use('/api/reports', reportRoutes);
+app.use('/api/settings', settingsRoutes); // ✅ mount settings routes
 
 // --- Health check ---
 app.get('/api/health', (_req, res) => res.json({ ok: true }));

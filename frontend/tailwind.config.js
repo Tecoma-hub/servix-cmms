@@ -1,13 +1,16 @@
 // tailwind.config.js
+/** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: 'class', // ✅ enable class-based dark mode
   content: [
-    "./src/**/*.{js,jsx,ts,tsx}",
+    './public/index.html',
+    './src/**/*.{js,jsx,ts,tsx}',
   ],
   theme: {
     extend: {
       colors: {
         teal: {
-          50: '#f0fdfa',
+          50:  '#f0fdfa',
           100: '#ccfbf1',
           200: '#99f6e4',
           300: '#5eead4',
@@ -19,7 +22,7 @@ module.exports = {
           900: '#134e4a',
         },
         blue: {
-          50: '#eff6ff',
+          50:  '#eff6ff',
           100: '#dbeafe',
           200: '#bfdbfe',
           300: '#93c5fd',
@@ -29,7 +32,7 @@ module.exports = {
           700: '#1d4ed8',
           800: '#1e40af',
           900: '#1e3a8a',
-        }
+        },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
@@ -37,4 +40,4 @@ module.exports = {
     },
   },
   plugins: [],
-}
+};
