@@ -1,106 +1,90 @@
 // backend/server.js
-const express = require('express');
-const mongoose = require('mongoose');
-const dotenv = require('dotenv');
-const cors = require('cors');
+require('dotenv').config();
+
+const path = require('path');
 const http = require('http');
-const { Server } = require('socket.io');
-const Task = require('./models/Task');
-const Equipment = require('./models/Equipment');
-
-dotenv.config({ path: './.env' });
-
-if (!process.env.MONGODB_URI) {
-  console.error('Error: MONGODB_URI is not defined in .env file');
-  process.exit(1);
-}
+const express = require('express');
+const cors = require('cors');
+const mongoose = require('mongoose');
+const morgan = require('morgan');
 
 // Routes
-const authRoutes = require('./routes/auth');
+const authRoutes = require('./routes/auth');           // if present in your project
+const userRoutes = require('./routes/users');
 const equipmentRoutes = require('./routes/equipment');
 const taskRoutes = require('./routes/tasks');
 const dashboardRoutes = require('./routes/dashboard');
-const userRoutes = require('./routes/users');
-
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true, useUnifiedTopology: true
-}).then(() => console.log('MongoDB Connected...'))
-  .catch(err => console.log('MongoDB Connection Error:', err));
+const reportRoutes = require('./routes/reports');      // <- NEW
 
 const app = express();
 const server = http.createServer(app);
 
-// Socket.IO
+// --- Socket.IO ---
+const { Server } = require('socket.io');
 const io = new Server(server, {
-  cors: { origin: 'http://localhost:3000', credentials: true }
+  cors: {
+    origin: process.env.CLIENT_ORIGIN || 'http://localhost:3000',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    credentials: true
+  }
 });
 app.set('io', io);
 
 io.on('connection', (socket) => {
-  // console.log('socket connected', socket.id);
+  // simple logging + room pattern if needed later
+  // const userId = socket.handshake.auth?.userId;
+  // if (userId) socket.join(`user:${userId}`);
+  socket.emit('connected', { ok: true });
   socket.on('disconnect', () => {});
 });
 
+// --- DB Connect ---
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/servix_cmms';
+mongoose.set('strictQuery', true);
+mongoose
+  .connect(MONGO_URI, { dbName: process.env.DB_NAME || undefined })
+  .then(() => console.log('MongoDB connected'))
+  .catch((err) => {
+    console.error('MongoDB connection error:', err.message);
+    process.exit(1);
+  });
+
+// --- Middleware ---
 app.use(cors({
-  origin: 'http://localhost:3000',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  origin: process.env.CLIENT_ORIGIN || 'http://localhost:3000',
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
 
-app.use('/api/auth', authRoutes);
+if (process.env.NODE_ENV !== 'production') {
+  app.use(morgan('dev'));
+}
+
+// --- Static for generated reports ---
+app.use('/downloads', express.static(path.join(process.cwd(), 'downloads')));
+
+// --- API routes ---
+app.use('/api/auth', authRoutes);            // if present in your project
+app.use('/api/users', userRoutes);
 app.use('/api/equipment', equipmentRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/users', userRoutes);
+app.use('/api/reports', reportRoutes);       // <- NEW
 
-app.get('/', (req, res) => {
-  res.status(200).json({ success: true, message: 'Servix CMMS API is running' });
+// --- Health check ---
+app.get('/api/health', (_req, res) => res.json({ ok: true }));
+
+// --- 404 handler ---
+app.use((req, res) => res.status(404).json({ message: 'Route not found' }));
+
+// --- Error handler ---
+app.use((err, _req, res, _next) => {
+  console.error('Server error:', err);
+  const status = err.status || 500;
+  res.status(status).json({ message: err.message || 'Server error' });
 });
 
-app.use('*', (req, res) => {
-  res.status(404).json({ success: false, message: 'Route not found' });
-});
-
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ success: false, message: 'Something went wrong' });
-});
-
+// --- Start ---
 const PORT = process.env.PORT || 5000;
-
-// --- Overdue sweep: every 10 minutes set equipment to Unserviceable when dueDate passed ---
-const runOverdueSweep = async () => {
-  try {
-    const now = new Date();
-    // Find overdue tasks that are not certified/cancelled/completed
-    const overdue = await Task.find({
-      dueDate: { $lte: now },
-      certified: { $ne: true },
-      status: { $nin: ['Completed', 'Cancelled'] }
-    }).select('equipment');
-
-    const eqIds = [...new Set(overdue.map(t => t.equipment?.toString()).filter(Boolean))];
-    if (eqIds.length) {
-      await Equipment.updateMany(
-        { _id: { $in: eqIds }, status: { $ne: 'Unserviceable' } },
-        { $set: { status: 'Unserviceable' } }
-      );
-      eqIds.forEach(id => io.emit('equipment:updated', { equipmentId: id, status: 'Unserviceable' }));
-    }
-  } catch (e) {
-    console.error('Overdue sweep error:', e.message);
-  }
-};
-
-// Kick off interval
-setInterval(runOverdueSweep, 10 * 60 * 1000); // every 10 minutes
-// Also run once on boot after DB connects
-mongoose.connection.once('open', () => setTimeout(runOverdueSweep, 3000));
-
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-
-process.on('unhandledRejection', (err) => {
-  console.log(`Error: ${err.message}`);
-  server.close(() => process.exit(1));
-});
+server.listen(PORT, () => console.log(`API listening on http://localhost:${PORT}`));

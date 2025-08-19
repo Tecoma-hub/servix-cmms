@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import socket from '../../utils/socket'; // <- your Socket.IO client
+import GenerateReportModal from '../reports/GenerateReportModal'; // <-- ADDED
 
 const Dashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
@@ -9,6 +10,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [userLoading, setUserLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showReportModal, setShowReportModal] = useState(false); // <-- ADDED
 
   // --- Load current user (fixes stale name/role everywhere) ---
   const fetchUser = async () => {
@@ -248,7 +250,7 @@ const Dashboard = () => {
           <QuickAction
             icon={<svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7" /></svg>}
             label="Generate Report"
-            onClick={() => alert('Report generation started')}
+            onClick={() => setShowReportModal(true)} // <-- OPEN MODAL
             color="border-purple-100"
           />
           <QuickAction
@@ -389,6 +391,9 @@ const Dashboard = () => {
         <div className="absolute top-20 -left-10 w-50 h-50 bg-blue-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse"></div>
         <div className="absolute top-40 -right-10 w-50 h-50 bg-green-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse" style={{ animationDelay: '2s' }}></div>
       </div>
+
+      {/* ==== Generate Report Modal ==== */}
+      <GenerateReportModal open={showReportModal} onClose={() => setShowReportModal(false)} />
     </div>
   );
 };

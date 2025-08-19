@@ -1,6 +1,6 @@
 // frontend/src/components/tasks/Tasks.js
 import React, { useEffect, useMemo, useState } from 'react';
-import { io } from 'socket.io-client';
+import socket, { ensureConnected } from '../../utils/socket'; // shared socket
 import api from '../../utils/api';
 import {
   ClipboardCheck,
@@ -53,28 +53,36 @@ function Tasks({ user }) {
     dueDate: '',
   });
 
-  // NEW: which tasks have the “Add Work” editor open
   const [openWorkEditors, setOpenWorkEditors] = useState(new Set());
+  const itemsPerPageCount = 8;
 
-  const itemsPerPage = 8;
-
-  // Socket.IO live updates
   useEffect(() => {
-    const socket = io('http://localhost:5000', { transports: ['websocket'] });
+    ensureConnected();
+
     const refresh = () => fetchTasks();
-    socket.on('tasks:created', refresh);
-    socket.on('tasks:updated', refresh);
+    socket.on('socket:ready', refresh);
+    socket.on('task:created', refresh);
+    socket.on('task:updated', refresh);
+    socket.on('task:workUpdated', refresh);
+    socket.on('task:certified', refresh);
+    socket.on('task:deleted', refresh);
     socket.on('equipment:updated', refresh);
+
+    // fetch immediately so technicians see dropdown without manual refresh
+    fetchTasks();
+
     return () => {
-      socket.off('tasks:created', refresh);
-      socket.off('tasks:updated', refresh);
+      socket.off('socket:ready', refresh);
+      socket.off('task:created', refresh);
+      socket.off('task:updated', refresh);
+      socket.off('task:workUpdated', refresh);
+      socket.off('task:certified', refresh);
+      socket.off('task:deleted', refresh);
       socket.off('equipment:updated', refresh);
-      socket.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fetch helpers
   useEffect(() => {
     if (user?.role === 'Engineer' || user?.role === 'Admin') {
       api
@@ -107,12 +115,6 @@ function Tasks({ user }) {
     }
   };
 
-  useEffect(() => {
-    fetchTasks();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Filters
   const filteredTasks = useMemo(() => {
     let filtered = tasks;
     if ((user.role === 'Engineer' || user.role === 'Admin') && selectedTechnicianId) {
@@ -129,17 +131,15 @@ function Tasks({ user }) {
       );
     }
     return filtered;
-  }, [tasks, selectedTechnicianId, user, searchTerm]);
+  }, [tasks, selectedTechnicianId, user.role, searchTerm]);
 
-  const itemsPerPageCount = Math.max(1, 8);
   const currentTasks = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPageCount;
     return filteredTasks.slice(start, start + itemsPerPageCount);
-  }, [filteredTasks, currentPage]);
+  }, [filteredTasks, currentPage, itemsPerPageCount]);
 
   useEffect(() => setCurrentPage(1), [searchTerm, selectedTechnicianId]);
 
-  // Visual helpers
   const getStatusColor = (status) => {
     switch (status) {
       case 'Completed': return 'bg-green-100 text-green-800 border border-green-200';
@@ -159,14 +159,13 @@ function Tasks({ user }) {
     }
   };
 
-  // Technician/Engineer status update
   const handleStatusChange = async (taskId, newStatus) => {
     try {
       setUpdatingTaskId(taskId);
       await api.put(`/tasks/${taskId}/status`, { status: newStatus });
       await fetchTasks();
-      setSuccessMsg('Task status submitted. Awaiting certification.');
-      setTimeout(() => setSuccessMsg(''), 2500);
+      setSuccessMsg('Task status submitted.');
+      setTimeout(() => setSuccessMsg(''), 2000);
     } catch (e) {
       setError(e.response?.data?.message || 'Failed to update task status');
     } finally {
@@ -174,14 +173,13 @@ function Tasks({ user }) {
     }
   };
 
-  // Certify (Engineer/Admin only)
   const certifyTask = async (taskId) => {
     try {
       setCertifyingId(taskId);
       await api.put(`/tasks/${taskId}/certify`);
       await fetchTasks();
       setSuccessMsg('Task certified. Equipment updated.');
-      setTimeout(() => setSuccessMsg(''), 3000);
+      setTimeout(() => setSuccessMsg(''), 2500);
     } catch (e) {
       setError(e.response?.data?.message || 'Failed to certify task');
     } finally {
@@ -189,7 +187,6 @@ function Tasks({ user }) {
     }
   };
 
-  // Work details editor
   const [detailsDraft, setDetailsDraft] = useState({});
   const changeDraft = (taskId, field, value) =>
     setDetailsDraft((prev) => ({ ...prev, [taskId]: { ...(prev[taskId] || {}), [field]: value } }));
@@ -212,14 +209,16 @@ function Tasks({ user }) {
             description: (desc || '').trim()
           };
         });
-      await api.put(`/tasks/${task._id}`, {
+
+      await api.put(`/tasks/${task._id}/work`, {
         faultDescription: draft.faultDescription ?? '',
         repairDetails: draft.repairDetails ?? '',
-        spareParts
+        sparePartsUsed: spareParts
       });
+
       await fetchTasks();
       setSuccessMsg('Work details saved');
-      setTimeout(() => setSuccessMsg(''), 2500);
+      setTimeout(() => setSuccessMsg(''), 2000);
     } catch (e) {
       setError(e.response?.data?.message || 'Failed to save work details');
     } finally {
@@ -227,7 +226,6 @@ function Tasks({ user }) {
     }
   };
 
-  // Assign Task handlers
   const handleNewTaskChange = (e) => {
     const { name, value } = e.target;
     setNewTaskData((prev) => ({ ...prev, [name]: value }));
@@ -394,21 +392,18 @@ function Tasks({ user }) {
           {currentTasks.map((task) => {
             const draft = detailsDraft[task._id] || {};
 
-// Support both shapes: assignedTo = {_id: "..."} OR assignedTo = "..."
-const assignedId =
-  typeof task.assignedTo === 'string'
-    ? task.assignedTo
-    : task.assignedTo?._id;
+            const assignedId = typeof task.assignedTo === 'string'
+              ? task.assignedTo
+              : task.assignedTo?._id;
 
-const userId = user?._id || user?.id; // tolerate either key
+            const userId = user?._id || user?.id;
 
-const canEditWork =
-  user.role === 'Technician' &&
-  assignedId &&
-  userId &&
-  String(assignedId) === String(userId) &&
-  !task.certified;
-
+            const canEditWork =
+              user.role === 'Technician' &&
+              assignedId &&
+              userId &&
+              String(assignedId) === String(userId) &&
+              !task.certified;
 
             const isOpen = openWorkEditors.has(task._id);
 
@@ -432,15 +427,18 @@ const canEditWork =
                 <div className={`flex items-center gap-2 px-4 py-2 ${getStatusColor(task.status)}`}>
                   {getStatusIcon(task.status)}
                   <span className="text-sm font-semibold">{task.status}</span>
-                  {task.awaitingCertification && (
+
+                  {/* Awaiting certification */}
+                  {task.needsCertification && (
                     <span className="ml-auto inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
                       <ShieldCheck className="w-3 h-3" />
                       Awaiting Certification
                     </span>
                   )}
-                  {task.certified && (
+                  {/* ✅ Certified chip shows engineer’s name */}
+                  {!task.needsCertification && task.status === 'Completed' && (
                     <span className="ml-auto text-xs px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      Certified
+                      Certified{task.certificationEngineer?.name ? ` by ${task.certificationEngineer.name}` : ''}
                     </span>
                   )}
                 </div>
@@ -478,7 +476,7 @@ const canEditWork =
                         <option value="Cancelled">Cancelled</option>
                       </select>
 
-                      {(user.role === 'Admin' || user.role === 'Engineer') && task.awaitingCertification && (
+                      {(user.role === 'Admin' || user.role === 'Engineer') && task.needsCertification && (
                         <button
                           onClick={() => certifyTask(task._id)}
                           disabled={certifyingId === task._id}
@@ -491,7 +489,7 @@ const canEditWork =
                     </div>
                   )}
 
-                  {/* ---------- NEW: Add Work button for Technician ---------- */}
+                  {/* Add Work button for Technician */}
                   {canEditWork && (
                     <div className="pt-2">
                       <button

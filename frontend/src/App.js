@@ -21,6 +21,9 @@ import Navbar from './components/layout/Navbar';
 import Sidebar from './components/layout/Sidebar';
 import PrivateRoute from './components/routing/PrivateRoute';
 
+// NEW: Reports page
+import ReportsPage from './components/reports/ReportsPage';
+
 // Set base URL for axios
 axios.defaults.baseURL = 'http://localhost:5000/api';
 axios.defaults.withCredentials = true;
@@ -69,12 +72,16 @@ function App() {
           });
           if (res.data && res.data.user) {
             setUser(res.data.user);
+            // keep user in localStorage for places like Sidebar initial
+            localStorage.setItem('user', JSON.stringify(res.data.user));
           } else {
             localStorage.removeItem('token');
+            localStorage.removeItem('user');
           }
         } catch (err) {
           console.error('Auth verification error:', err);
           localStorage.removeItem('token');
+          localStorage.removeItem('user');
         }
       }
       setLoading(false);
@@ -85,6 +92,7 @@ function App() {
   const login = (userData) => {
     if (userData?.token && userData?.user) {
       localStorage.setItem('token', userData.token);
+      localStorage.setItem('user', JSON.stringify(userData.user));
       setUser(userData.user);
       axios.defaults.headers.common['Authorization'] = `Bearer ${userData.token}`;
     }
@@ -93,6 +101,7 @@ function App() {
   const logout = () => {
     setUser(null);
     localStorage.removeItem('token');
+    localStorage.removeItem('user');
     delete axios.defaults.headers.common['Authorization'];
     window.location.href = '/login';
   };
@@ -126,16 +135,96 @@ function App() {
                   <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />} />
 
                   {/* Protected routes */}
-                  <Route path="/dashboard" element={<PrivateRoute user={user}><Dashboard user={user} setCurrentPage={setCurrentPage} /></PrivateRoute>} />
-                  <Route path="/equipment" element={<PrivateRoute user={user}><Equipment user={user} setCurrentPage={setCurrentPage} /></PrivateRoute>} />
-                  <Route path="/add-equipment" element={<PrivateRoute user={user}><AddEquipment user={user} setCurrentPage={setCurrentPage} /></PrivateRoute>} />
-                  <Route path="/maintenance" element={<PrivateRoute user={user}><Maintenance user={user} setCurrentPage={setCurrentPage} /></PrivateRoute>} />
-                  <Route path="/schedule-preventive" element={<PrivateRoute user={user} role="Engineer"><SchedulePreventive user={user} setCurrentPage={setCurrentPage} /></PrivateRoute>} />
-                  <Route path="/report-issue" element={<PrivateRoute user={user}><ReportIssue user={user} setCurrentPage={setCurrentPage} /></PrivateRoute>} />
-                  <Route path="/tasks" element={<PrivateRoute user={user}><Tasks user={user} setCurrentPage={setCurrentPage} /></PrivateRoute>} />
-                  <Route path="/add-task" element={<PrivateRoute user={user}><AddTask user={user} setCurrentPage={setCurrentPage} /></PrivateRoute>} />
-                  <Route path="/users" element={<PrivateRoute user={user} role="Engineer"><Users user={user} setCurrentPage={setCurrentPage} /></PrivateRoute>} />
-                  <Route path="/add-user" element={<PrivateRoute user={user} role="Engineer"><AddUser user={user} setCurrentPage={setCurrentPage} /></PrivateRoute>} />
+                  <Route
+                    path="/dashboard"
+                    element={
+                      <PrivateRoute user={user}>
+                        <Dashboard user={user} setCurrentPage={setCurrentPage} />
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/equipment"
+                    element={
+                      <PrivateRoute user={user}>
+                        <Equipment user={user} setCurrentPage={setCurrentPage} />
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/add-equipment"
+                    element={
+                      <PrivateRoute user={user}>
+                        <AddEquipment user={user} setCurrentPage={setCurrentPage} />
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/maintenance"
+                    element={
+                      <PrivateRoute user={user}>
+                        <Maintenance user={user} setCurrentPage={setCurrentPage} />
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/schedule-preventive"
+                    element={
+                      <PrivateRoute user={user} role="Engineer">
+                        <SchedulePreventive user={user} setCurrentPage={setCurrentPage} />
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/report-issue"
+                    element={
+                      <PrivateRoute user={user}>
+                        <ReportIssue user={user} setCurrentPage={setCurrentPage} />
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/tasks"
+                    element={
+                      <PrivateRoute user={user}>
+                        <Tasks user={user} setCurrentPage={setCurrentPage} />
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/add-task"
+                    element={
+                      <PrivateRoute user={user}>
+                        <AddTask user={user} setCurrentPage={setCurrentPage} />
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/users"
+                    element={
+                      <PrivateRoute user={user} role="Engineer">
+                        <Users user={user} setCurrentPage={setCurrentPage} />
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/add-user"
+                    element={
+                      <PrivateRoute user={user} role="Engineer">
+                        <AddUser user={user} setCurrentPage={setCurrentPage} />
+                      </PrivateRoute>
+                    }
+                  />
+
+                  {/* NEW: Reports route (protected) */}
+                  <Route
+                    path="/reports"
+                    element={
+                      <PrivateRoute user={user}>
+                        <ReportsPage user={user} setCurrentPage={setCurrentPage} />
+                      </PrivateRoute>
+                    }
+                  />
 
                   {/* Catch all unmatched routes */}
                   <Route path="*" element={<Navigate to={user ? "/dashboard" : "/login"} replace />} />

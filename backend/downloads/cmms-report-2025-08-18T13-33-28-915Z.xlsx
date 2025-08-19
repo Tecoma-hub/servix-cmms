@@ -1,0 +1,6 @@
+CMMS Report
+Generated,8/18/2025, 1:33:28 PM
+Requested By,Isaac Owusu Kwakye
+Reports,taskManagement
+Filters,{"dateFrom":"2025-07-18","dateTo":"2025-08-18","departments":[],"categories":[]}
+Options,{"format":"xlsx","visuals":{"charts":true,"summary":true},"advanced":{"interactiveExport":false,"trendPrediction":false,"heatMaps":false},"schedule":{"enabled":false},"delivery":{"downloadNow":true}}

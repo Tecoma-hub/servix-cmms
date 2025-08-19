@@ -1,242 +1,381 @@
 // backend/routes/tasks.js
 const express = require('express');
-const router = express.Router();
 const asyncHandler = require('express-async-handler');
-const { protect, authorize } = require('../middleware/auth');
+const { protect } = require('../middleware/auth');
 const Task = require('../models/Task');
 const Equipment = require('../models/Equipment');
+const User = require('../models/User');
 
-// GET /api/tasks
-// Techs: only their tasks. Engineers/Admins: all (or ?my=1 for own).
-// Optional ?equipmentId=
-router.get(
-  '/',
-  protect,
-  asyncHandler(async (req, res) => {
-    const { equipmentId, my } = req.query;
+const router = express.Router();
 
-    const filter = {};
-    if (equipmentId) filter.equipment = equipmentId;
+/* ---------- helpers ---------- */
+const isEngineer = (u) => ['Admin', 'Engineer'].includes(u.role);
+const affectsMaintenance = (type) =>
+  String(type || '').toLowerCase().match(/repair|calibrat|assess|inspect/);
 
-    if (req.user.role === 'Technician' || my === '1') {
-      filter.assignedTo = req.user._id;
-    }
+// prevent empty strings from tripping enum validation
+const cleanPM = (obj = {}) => {
+  const out = { ...obj };
+  if (out.pmType === '') out.pmType = undefined;
+  if (out.pmInterval === '') out.pmInterval = undefined;
+  return out;
+};
 
-    const tasks = await Task.find(filter)
-      .populate('assignedTo', 'name role')
-      .populate('assignedBy', 'name role')
-      .populate('equipment', 'name serialNumber status')
-      .sort({ createdAt: -1 });
+const normalizeSpareParts = (parts) => {
+  if (!Array.isArray(parts)) return [];
+  return parts
+    .map((p) => {
+      if (typeof p === 'string') {
+        const name = p.trim();
+        return name ? { name, quantity: 1, description: '' } : null;
+      }
+      return {
+        name: (p?.name || '').toString().trim(),
+        quantity: Number(p?.quantity) > 0 ? Number(p.quantity) : 1,
+        description: (p?.description || '').toString().trim(),
+      };
+    })
+    .filter(Boolean);
+};
 
-    res.json({ success: true, tasks });
-  })
-);
-
-// POST /api/tasks  (assign)
+/* ------------------------------------------------------------------ */
+/* CREATE                                                              */
+/* ------------------------------------------------------------------ */
 router.post(
   '/',
   protect,
-  authorize('Engineer', 'Admin'),
   asyncHandler(async (req, res) => {
+    if (!isEngineer(req.user)) {
+      return res.status(403).json({ message: 'Not authorized to assign tasks' });
+    }
+
+    const body = cleanPM(req.body);
     const {
       title,
       description,
       taskType,
-      pmType,
-      pmInterval,
       priority = 'Low',
       assignedTo,
       equipment,
-      dueDate
-    } = req.body;
+      dueDate,
+      isPreventive = false,
+      pmType,
+      pmInterval,
+    } = body;
 
-    if (!title || !taskType || !equipment || !dueDate) {
-      return res.status(400).json({ message: 'Title, Task Type, Equipment and Due Date are required.' });
+    if (!title || !taskType || !equipment) {
+      return res
+        .status(400)
+        .json({ message: 'title, taskType and equipment are required' });
     }
 
-    if (taskType === 'Preventive' && (!pmType || !pmInterval)) {
-      return res.status(400).json({ message: 'PM Type and Periodic Interval are required for Preventive tasks.' });
+    const equip = await Equipment.findById(equipment);
+    if (!equip) return res.status(404).json({ message: 'Equipment not found' });
+
+    let tech = null;
+    if (assignedTo) {
+      tech = await User.findById(assignedTo);
+      if (!tech || tech.role !== 'Technician') {
+        return res
+          .status(400)
+          .json({ message: 'Assigned user must be a Technician' });
+      }
     }
 
-    const payload = {
+    const task = await Task.create({
       title,
       description,
       taskType,
       priority,
+      assignedTo: tech ? tech._id : null,
       assignedBy: req.user._id,
-      equipment,
+      createdBy: req.user._id,
+      equipment: equip._id,
       dueDate,
-      createdBy: req.user._id
-    };
-    if (assignedTo) payload.assignedTo = assignedTo;
-    if (taskType === 'Preventive') {
-      payload.pmType = pmType;
-      payload.pmInterval = pmInterval;
-      payload.isPreventive = true;
+      isPreventive: !!isPreventive,
+      pmType: isPreventive ? pmType : undefined,
+      pmInterval: isPreventive ? pmInterval : undefined,
+      needsCertification: false,
+      certificationEngineer: null,
+      certifiedAt: null,
+    });
+
+    // For non-install corrective work, mark equipment Under Maintenance immediately
+    if (!task.isPreventive && affectsMaintenance(task.taskType)) {
+      if (equip.status !== 'Under Maintenance') {
+        equip.status = 'Under Maintenance';
+        await equip.save();
+      }
     }
 
-    // When assigning, set initial equipment status business rule
-    // (Install => keep Serviceable; others => Under Maintenance)
-    const created = await Task.create(payload);
-
-    // Apply initial equipment flag on assign
-    try {
-      const eq = await Equipment.findById(equipment);
-      if (eq) {
-        if (taskType === 'Install') {
-          // keep as is or ensure Serviceable
-          if (eq.status !== 'Serviceable') {
-            eq.status = 'Serviceable';
-            await eq.save();
-          }
-        } else {
-          if (eq.status !== 'Under Maintenance') {
-            eq.status = 'Under Maintenance';
-            await eq.save();
-          }
-        }
-      }
-    } catch (_) {}
-
-    // Socket broadcast
-    try {
-      const io = req.app.get('io');
-      if (io) {
-        io.emit('tasks:created', created._id);
-        io.emit('equipment:updated', equipment);
-      }
-    } catch (_) {}
-
-    res.status(201).json({ success: true, task: created });
+    req.app.get('io')?.emit('task:created', { taskId: task._id });
+    res.status(201).json({ success: true, task });
   })
 );
 
-// PUT /api/tasks/:id/status
-// Tech can update own task -> marks awaitingCertification=true
-// Engineer/Admin can also change; still requires certification to affect inventory.
+/* ------------------------------------------------------------------ */
+/* READ: list                                                          */
+/* ------------------------------------------------------------------ */
+router.get(
+  '/',
+  protect,
+  asyncHandler(async (req, res) => {
+    const q = {};
+    if (req.user.role === 'Technician') {
+      q.assignedTo = req.user._id; // tech only sees their own
+    }
+
+    // includePreventive=false by default
+    if (!('includePreventive' in req.query)) {
+      q.isPreventive = { $ne: true };
+    } else if (String(req.query.includePreventive) === 'false') {
+      q.isPreventive = { $ne: true };
+    }
+
+    if (req.query.equipmentId) q.equipment = req.query.equipmentId;
+
+    const tasks = await Task.find(q)
+      .populate('assignedTo', 'name role')
+      .populate('assignedBy', 'name role')
+      .populate('certificationEngineer', 'name') // ✅ so UI can show “Certified by …”
+      .populate('equipment', 'name serialNumber status')
+      .sort({ createdAt: -1 });
+
+    res.json({ success: true, count: tasks.length, tasks });
+  })
+);
+
+/* ------------------------------------------------------------------ */
+/* READ: one                                                           */
+/* ------------------------------------------------------------------ */
+router.get(
+  '/:id',
+  protect,
+  asyncHandler(async (req, res) => {
+    const task = await Task.findById(req.params.id)
+      .populate('assignedTo', 'name role')
+      .populate('assignedBy', 'name role')
+      .populate('certificationEngineer', 'name') // ✅
+      .populate(
+        'equipment',
+        'name serialNumber status location department category'
+      );
+
+    if (!task) return res.status(404).json({ message: 'Task not found' });
+    if (
+      req.user.role === 'Technician' &&
+      String(task.assignedTo) !== String(req.user._id)
+    ) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    res.json({ success: true, task });
+  })
+);
+
+/* ------------------------------------------------------------------ */
+/* UPDATE STATUS (tech or engineer)                                    */
+/* ------------------------------------------------------------------ */
 router.put(
   '/:id/status',
   protect,
   asyncHandler(async (req, res) => {
-    const { status } = req.body;
-    const validStatuses = ['Pending', 'In Progress', 'Completed', 'Cancelled'];
-    if (!validStatuses.includes(status)) return res.status(400).json({ message: 'Invalid status' });
-
-    const task = await Task.findById(req.params.id);
-    if (!task) return res.status(404).json({ message: 'Task not found' });
-
-    // Tech can only update own tasks
-    if (req.user.role === 'Technician' && String(task.assignedTo) !== String(req.user._id)) {
-      return res.status(403).json({ message: 'Not allowed' });
+    const valid = ['Pending', 'In Progress', 'Completed', 'Cancelled'];
+    const { status } = cleanPM(req.body);
+    if (!valid.includes(status)) {
+      return res.status(400).json({ message: 'Invalid status' });
     }
 
-    // Update task status; DO NOT touch equipment here.
-    task.status = status;
-    task.awaitingCertification = true;
-    task.certified = false;
-    if (status === 'Completed') {
-      task.completedDate = new Date();
-    } else if (status === 'Cancelled' || status === 'Pending' || status === 'In Progress') {
-      task.completedDate = null;
+    const t = await Task.findById(req.params.id).populate('equipment');
+    if (!t) return res.status(404).json({ message: 'Task not found' });
+
+    if (
+      req.user.role === 'Technician' &&
+      String(t.assignedTo) !== String(req.user._id)
+    ) {
+      return res.status(403).json({ message: 'Forbidden' });
     }
-    await task.save();
 
-    try {
-      const io = req.app.get('io');
-      if (io) io.emit('tasks:updated', task._id);
-    } catch (_) {}
+    t.status = status;
+    if (req.user.role === 'Technician') t.needsCertification = true;
 
-    // Return populated version
-    const updated = await Task.findById(task._id)
+    // Engineer direct status changes should immediately update equipment
+    if (isEngineer(req.user) && t.equipment) {
+      if (t.status === 'Pending' || t.status === 'In Progress') {
+        t.equipment.status = 'Under Maintenance';
+      } else if (t.status === 'Completed') {
+        t.equipment.status = 'Serviceable';
+      } else if (t.status === 'Cancelled') {
+        t.equipment.status = 'Decommissioned';
+      }
+      await t.equipment.save();
+      // maintain certification info if setting to Completed and already certified previously
+    }
+
+    t.completedDate = status === 'Completed' ? Date.now() : null;
+
+    // PM hygiene
+    if (!t.isPreventive) {
+      t.pmType = undefined;
+      t.pmInterval = undefined;
+    } else {
+      if (t.pmType === '') t.pmType = undefined;
+      if (t.pmInterval === '') t.pmInterval = undefined;
+    }
+
+    if (!t.createdBy && t.assignedBy) t.createdBy = t.assignedBy;
+
+    await t.save();
+
+    req.app.get('io')?.emit('task:updated', { taskId: t._id });
+
+    const task = await Task.findById(t._id)
       .populate('assignedTo', 'name role')
       .populate('assignedBy', 'name role')
+      .populate('certificationEngineer', 'name')
       .populate('equipment', 'name serialNumber status');
 
-    res.json({ success: true, task: updated });
+    res.json({ success: true, task });
   })
 );
 
-// PUT /api/tasks/:id  (save work details: fault/repair/spares)
+/* ------------------------------------------------------------------ */
+/* ADD/UPDATE WORK (tech or engineer notes)                             */
+/* ------------------------------------------------------------------ */
 router.put(
-  '/:id',
+  '/:id/work',
   protect,
   asyncHandler(async (req, res) => {
-    const task = await Task.findById(req.params.id);
-    if (!task) return res.status(404).json({ message: 'Task not found' });
+    const t = await Task.findById(req.params.id);
+    if (!t) return res.status(404).json({ message: 'Task not found' });
 
-    if (req.user.role === 'Technician' && String(task.assignedTo) !== String(req.user._id)) {
-      return res.status(403).json({ message: 'Not allowed' });
+    if (
+      req.user.role === 'Technician' &&
+      String(t.assignedTo) !== String(req.user._id)
+    ) {
+      return res.status(403).json({ message: 'Forbidden' });
     }
 
-    const { faultDescription, repairDetails, spareParts } = req.body;
-    if (faultDescription !== undefined) task.faultDescription = faultDescription;
-    if (repairDetails !== undefined) task.repairDetails = repairDetails;
-    if (Array.isArray(spareParts)) task.spareParts = spareParts;
+    const body = cleanPM(req.body);
+    const { faultDescription, repairDetails, sparePartsUsed } = body;
 
-    await task.save();
+    if (faultDescription !== undefined) {
+      t.faultDescription =
+        typeof faultDescription === 'string'
+          ? faultDescription.trim()
+          : faultDescription;
+    }
+    if (repairDetails !== undefined) {
+      t.comments =
+        typeof repairDetails === 'string'
+          ? repairDetails.trim()
+          : repairDetails;
+    }
+    if (Array.isArray(sparePartsUsed)) {
+      t.spareParts = normalizeSpareParts(sparePartsUsed);
+    }
 
-    try {
-      const io = req.app.get('io');
-      if (io) io.emit('tasks:updated', task._id);
-    } catch (_) {}
+    if (!t.isPreventive) {
+      t.pmType = undefined;
+      t.pmInterval = undefined;
+    } else {
+      if (t.pmType === '') t.pmType = undefined;
+      if (t.pmInterval === '') t.pmInterval = undefined;
+    }
 
-    const updated = await Task.findById(task._id)
+    if (!t.createdBy && t.assignedBy) t.createdBy = t.assignedBy;
+
+    t.needsCertification = true;
+    await t.save();
+
+    req.app.get('io')?.emit('task:workUpdated', { taskId: t._id });
+
+    const task = await Task.findById(t._id)
       .populate('assignedTo', 'name role')
       .populate('assignedBy', 'name role')
+      .populate('certificationEngineer', 'name')
       .populate('equipment', 'name serialNumber status');
 
-    res.json({ success: true, task: updated });
+    res.json({ success: true, task });
   })
 );
 
-// PUT /api/tasks/:id/certify
-// Engineer/Admin confirms change and applies mapping to the inventory.
+/* ------------------------------------------------------------------ */
+/* CERTIFY (engineer/admin only)                                       */
+/* ------------------------------------------------------------------ */
 router.put(
   '/:id/certify',
   protect,
-  authorize('Engineer', 'Admin'),
   asyncHandler(async (req, res) => {
-    const task = await Task.findById(req.params.id).populate('equipment');
-    if (!task) return res.status(404).json({ message: 'Task not found' });
-
-    // Apply equipment status mapping based on current task.status
-    let nextEqStatus = task.equipment?.status;
-
-    if (task.status === 'Pending' || task.status === 'In Progress') {
-      nextEqStatus = 'Under Maintenance';
-    } else if (task.status === 'Completed') {
-      nextEqStatus = 'Serviceable';
-    } else if (task.status === 'Cancelled') {
-      nextEqStatus = 'Decommissioned';
+    if (!isEngineer(req.user)) {
+      return res
+        .status(403)
+        .json({ message: 'Only Engineer/Admin can certify' });
     }
 
-    // Persist equipment update
-    if (task.equipment && nextEqStatus && task.equipment.status !== nextEqStatus) {
-      task.equipment.status = nextEqStatus;
-      await task.equipment.save();
+    const t = await Task.findById(req.params.id).populate('equipment');
+    if (!t) return res.status(404).json({ message: 'Task not found' });
+
+    // mark certification info
+    t.needsCertification = false;
+    t.certificationEngineer = req.user._id;        // ✅ who certified
+    t.certifiedAt = new Date();                    // ✅ when
+
+    if (!t.createdBy && t.assignedBy) t.createdBy = t.assignedBy;
+
+    // PM tidy up
+    if (!t.isPreventive) {
+      t.pmType = undefined;
+      t.pmInterval = undefined;
+    } else {
+      if (t.pmType === '') t.pmType = undefined;
+      if (t.pmInterval === '') t.pmInterval = undefined;
     }
 
-    // Mark certified
-    task.certified = true;
-    task.awaitingCertification = false;
-    task.certifiedAt = new Date();
-    task.certifiedBy = req.user._id;
-    await task.save();
-
-    try {
-      const io = req.app.get('io');
-      if (io) {
-        io.emit('tasks:updated', task._id);
-        if (task.equipment?._id) io.emit('equipment:updated', String(task.equipment._id));
+    // Apply equipment transition AFTER certification
+    if (t.equipment) {
+      if (t.status === 'Pending' || t.status === 'In Progress') {
+        t.equipment.status = 'Under Maintenance';
+      } else if (t.status === 'Completed') {
+        t.equipment.status = 'Serviceable';
+      } else if (t.status === 'Cancelled') {
+        t.equipment.status = 'Decommissioned';
       }
-    } catch (_) {}
+      await t.equipment.save();
+    }
 
-    const updated = await Task.findById(task._id)
+    await t.save();
+
+    req.app.get('io')?.emit('task:certified', { taskId: t._id });
+
+    const task = await Task.findById(t._id)
       .populate('assignedTo', 'name role')
       .populate('assignedBy', 'name role')
+      .populate('certificationEngineer', 'name')   // ✅ return the engineer’s name
       .populate('equipment', 'name serialNumber status');
 
-    res.json({ success: true, task: updated });
+    res.json({ success: true, task });
+  })
+);
+
+/* ------------------------------------------------------------------ */
+/* DELETE (engineer/admin only)                                        */
+/* ------------------------------------------------------------------ */
+router.delete(
+  '/:id',
+  protect,
+  asyncHandler(async (req, res) => {
+    if (!isEngineer(req.user)) {
+      return res
+        .status(403)
+        .json({ message: 'Only Engineer/Admin can delete' });
+    }
+    const t = await Task.findById(req.params.id);
+    if (!t) return res.status(404).json({ message: 'Task not found' });
+
+    await t.remove();
+    req.app.get('io')?.emit('task:deleted', { taskId: t._id });
+    res.json({ success: true, message: 'Task deleted' });
   })
 );
 
