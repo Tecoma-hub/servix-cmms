@@ -2,27 +2,48 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0ea5e9" />
-    <meta name="description" content="Servix CMMS — Maintenance & Asset Management" />
-    <title>Servix CMMS</title>
 
-    <!-- iOS/Android installable app niceties (optional but harmless) -->
+    <!-- Favicon / App Icons -->
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+
+    <!-- Mobile + PWA meta -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0ea5e9" />
+    <meta
+      name="description"
+      content="Servix CMMS — Maintenance & Asset Management"
+    />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <meta name="apple-mobile-web-app-title" content="Servix CMMS" />
+
+    <title>Servix CMMS</title>
 
     <!-- Mobile 100vh fix: prefer dynamic viewport units when available -->
     <style>
-      :root { color-scheme: light; }
-      html, body, #root { height: 100%; }
+      :root {
+        color-scheme: light;
+      }
+      html,
+      body,
+      #root {
+        height: 100%;
+      }
       /* iOS/Android safe-view height */
       @supports (height: 100svh) {
-        .min-h-screen-fix { min-height: 100svh; }
+        .min-h-screen-fix {
+          min-height: 100svh;
+        }
       }
       @supports not (height: 100svh) {
-        .min-h-screen-fix { min-height: 100vh; }
+        .min-h-screen-fix {
+          min-height: 100vh;
+        }
       }
     </style>
   </head>

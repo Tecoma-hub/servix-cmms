@@ -1,7 +1,7 @@
 // frontend/src/components/maintenance/Maintenance.js
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import api from '../../utils/api';
-import { Wrench, Plus, Calendar, ClipboardList, AlertCircle, Users } from 'lucide-react';
+import { Wrench, Plus, Calendar, ClipboardList, AlertCircle, Users, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 const socketURL = 'http://localhost:5000';
@@ -25,6 +25,8 @@ const PM_INTERVALS = [
   'Every 2 Years'
 ];
 
+const ITEMS_PER_PAGE = 8; // pagination size for history
+
 const Maintenance = ({ user }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState('');
@@ -34,6 +36,10 @@ const Maintenance = ({ user }) => {
 
   const [upcomingPM, setUpcomingPM] = useState([]); // unassigned PM
   const [history, setHistory] = useState([]);       // completed
+
+  // Search + pagination (history)
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
 
   // PM modal
   const [showPM, setShowPM] = useState(false);
@@ -79,11 +85,10 @@ const Maintenance = ({ user }) => {
         .sort((a, b) => new Date(a.dueDate || a.createdAt) - new Date(b.dueDate || b.createdAt));
       setUpcomingPM(pm);
 
-      // History: Completed only
+      // History: Completed only (full list; we’ll paginate in UI)
       const hist = all
         .filter(t => t.status === 'Completed')
-        .sort((a, b) => new Date(b.completedDate || b.updatedAt || b.createdAt) - new Date(a.completedDate || a.updatedAt || a.createdAt))
-        .slice(0, 20);
+        .sort((a, b) => new Date(b.completedDate || b.updatedAt || b.createdAt) - new Date(a.completedDate || a.updatedAt || a.createdAt));
       setHistory(hist);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to fetch maintenance data');
@@ -92,7 +97,7 @@ const Maintenance = ({ user }) => {
     }
   };
 
-  useEffect(() => { getAll(); }, []);
+  useEffect(() => { getAll(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
   // Live
   useEffect(() => {
@@ -109,7 +114,13 @@ const Maintenance = ({ user }) => {
       s.off('equipment:statusChanged', refresh);
       s.disconnect();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Reset page when search changes
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
 
   const statusBadge = s => ({
     'Completed':      'bg-green-100 text-green-700 border border-green-200',
@@ -117,6 +128,38 @@ const Maintenance = ({ user }) => {
     'Pending':        'bg-yellow-100 text-yellow-700 border border-yellow-200',
     'Cancelled':      'bg-red-100 text-red-700 border border-red-200'
   }[s] || 'bg-slate-100 text-slate-700 border border-slate-200');
+
+  // Search filter (applies to both panels)
+  const matchesSearch = (t) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      (t.title || '').toLowerCase().includes(q) ||
+      (t.description || '').toLowerCase().includes(q) ||
+      (t.taskType || '').toLowerCase().includes(q) ||
+      (t.status || '').toLowerCase().includes(q) ||
+      (t.priority || '').toLowerCase().includes(q) ||
+      (t.pmInterval || '').toLowerCase().includes(q) ||
+      (t.equipment?.name || '').toLowerCase().includes(q) ||
+      (t.assignedTo?.name || '').toLowerCase().includes(q)
+    );
+  };
+
+  const filteredPM = useMemo(
+    () => upcomingPM.filter(matchesSearch),
+    [upcomingPM, search]
+  );
+
+  const filteredHistory = useMemo(
+    () => history.filter(matchesSearch),
+    [history, search]
+  );
+
+  // Pagination for history
+  const totalPages = Math.max(1, Math.ceil(filteredHistory.length / ITEMS_PER_PAGE));
+  const pageClamped = Math.min(page, totalPages);
+  const start = (pageClamped - 1) * ITEMS_PER_PAGE;
+  const currentHistory = filteredHistory.slice(start, start + ITEMS_PER_PAGE);
 
   // PM modal handlers
   const openPM = () => setShowPM(true);
@@ -146,11 +189,8 @@ const Maintenance = ({ user }) => {
     }
 
     try {
-      // POST /tasks — this will create a task and (by prior logic)
-      // - if you pick a technician, it won’t appear in Preventive panel (unassigned-only)
       await api.post('/tasks', {
         ...pmForm,
-        // Normalize empty assignment to undefined so backend treats it as unassigned PM
         assignedTo: pmForm.assignedTo || undefined,
       });
 
@@ -159,6 +199,11 @@ const Maintenance = ({ user }) => {
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to schedule preventive task');
     }
+  };
+
+  const fmtDate = (d) => {
+    const dt = new Date(d);
+    return Number.isNaN(dt.getTime()) ? '—' : dt.toLocaleString();
   };
 
   if (loading) {
@@ -176,7 +221,7 @@ const Maintenance = ({ user }) => {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-12 px-4">
       <div className="max-w-7xl mx-auto">
         {/* Header & Actions */}
-        <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-blue-600 to-green-500 flex items-center justify-center text-white">
               <Wrench className="w-6 h-6" />
@@ -184,6 +229,19 @@ const Maintenance = ({ user }) => {
             <div>
               <h1 className="text-3xl font-bold text-slate-800">Maintenance Management</h1>
               <p className="text-slate-600">Plan, schedule, and review.</p>
+            </div>
+          </div>
+
+          <div className="flex-1 md:flex-none">
+            {/* Global search */}
+            <div className="relative max-w-md ml-auto">
+              <Search className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by title, equipment, type, status, technician…"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 placeholder-slate-400"
+              />
             </div>
           </div>
 
@@ -213,11 +271,11 @@ const Maintenance = ({ user }) => {
               <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
                 <ClipboardList className="w-5 h-5 text-blue-600" /> Preventive Maintenance
               </h2>
-              <span className="text-sm text-slate-500">{upcomingPM.length} item{upcomingPM.length !== 1 ? 's' : ''}</span>
+              <span className="text-sm text-slate-500">{filteredPM.length} item{filteredPM.length !== 1 ? 's' : ''}</span>
             </div>
 
             <div className="p-6">
-              {upcomingPM.length === 0 ? (
+              {filteredPM.length === 0 ? (
                 <div className="text-center py-10">
                   <svg className="mx-auto h-14 w-14 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-3-3v6m9 3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -226,7 +284,7 @@ const Maintenance = ({ user }) => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {upcomingPM.map(t => (
+                  {filteredPM.map(t => (
                     <div key={t._id} className="p-4 rounded-xl border border-slate-200 bg-white hover:shadow-sm transition">
                       <div className="flex items-start justify-between">
                         <div className="min-w-0 pr-3">
@@ -250,17 +308,19 @@ const Maintenance = ({ user }) => {
             </div>
           </div>
 
-          {/* Maintenance History */}
+          {/* Maintenance History (search + pagination) */}
           <div className="bg-white rounded-2xl shadow-lg border border-slate-200">
             <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
                 <Wrench className="w-5 h-5 text-emerald-600" /> Maintenance History
               </h2>
-              <span className="text-sm text-slate-500">{history.length} record{history.length !== 1 ? 's' : ''}</span>
+              <span className="text-sm text-slate-500">
+                {filteredHistory.length} record{filteredHistory.length !== 1 ? 's' : ''}
+              </span>
             </div>
 
             <div className="p-6">
-              {history.length === 0 ? (
+              {filteredHistory.length === 0 ? (
                 <div className="text-center py-10">
                   <svg className="mx-auto h-14 w-14 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-3-3v6m9 3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -268,39 +328,70 @@ const Maintenance = ({ user }) => {
                   <p className="mt-3 text-slate-600">No maintenance history yet.</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {history.map(t => (
-                    <div key={t._id} className="p-4 rounded-xl border border-slate-200 bg-white hover:shadow-sm transition">
-                      <div className="flex items-start justify-between">
-                        <div className="min-w-0 pr-3">
-                          <div className="text-slate-800 font-semibold truncate">{t.title}</div>
-                          {t.description && <div className="text-sm text-slate-600 mt-1 line-clamp-2">{t.description}</div>}
+                <>
+                  <div className="space-y-4">
+                    {currentHistory.map(t => (
+                      <div key={t._id} className="p-4 rounded-xl border border-slate-200 bg-white hover:shadow-sm transition">
+                        <div className="flex items-start justify-between">
+                          <div className="min-w-0 pr-3">
+                            <div className="text-slate-800 font-semibold truncate">{t.title}</div>
+                            {t.description && <div className="text-sm text-slate-600 mt-1 line-clamp-2">{t.description}</div>}
 
-                          {(t.faultDescription || t.comments || (t.spareParts?.length > 0)) && (
-                            <div className="mt-2 p-3 rounded-lg bg-slate-50 border border-slate-200">
-                              {t.faultDescription && <div className="text-sm text-slate-700"><span className="font-medium">Fault:</span> {t.faultDescription}</div>}
-                              {t.comments && <div className="text-sm text-slate-700"><span className="font-medium">Repair Details:</span> {t.comments}</div>}
-                              {t.spareParts?.length > 0 && (
-                                <div className="text-sm text-slate-700">
-                                  <span className="font-medium">Spare Parts:</span>{' '}
-                                  {t.spareParts.map((p, i) => <span key={i} className="mr-2">{p.name}({p.quantity || 1})</span>)}
-                                </div>
-                              )}
+                            {(t.faultDescription || t.comments || (t.spareParts?.length > 0)) && (
+                              <div className="mt-2 p-3 rounded-lg bg-slate-50 border border-slate-200">
+                                {t.faultDescription && <div className="text-sm text-slate-700"><span className="font-medium">Fault:</span> {t.faultDescription}</div>}
+                                {t.comments && <div className="text-sm text-slate-700"><span className="font-medium">Repair Details:</span> {t.comments}</div>}
+                                {t.spareParts?.length > 0 && (
+                                  <div className="text-sm text-slate-700">
+                                    <span className="font-medium">Spare Parts:</span>{' '}
+                                    {t.spareParts.map((p, i) => <span key={i} className="mr-2">{p.name}({p.quantity || 1})</span>)}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            <div className="mt-2 text-xs text-slate-500">
+                              Equipment: {t.equipment?.name || '—'}
+                              {t.assignedTo?.name ? ` • Technician: ${t.assignedTo.name}` : ''}
                             </div>
-                          )}
-
-                          <div className="mt-2 text-xs text-slate-500">
-                            Equipment: {t.equipment?.name || '—'}
-                            {t.assignedTo?.name ? ` • Technician: ${t.assignedTo.name}` : ''}
+                          </div>
+                          <div className="text-xs text-slate-500 whitespace-nowrap">
+                            {fmtDate(t.completedDate || t.updatedAt || t.createdAt)}
                           </div>
                         </div>
-                        <div className="text-xs text-slate-500 whitespace-nowrap">
-                          {t.completedDate ? new Date(t.completedDate).toLocaleString() : new Date(t.updatedAt || t.createdAt).toLocaleString()}
-                        </div>
                       </div>
+                    ))}
+                  </div>
+
+                  {/* Pagination controls */}
+                  <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4">
+                    <div className="text-sm text-slate-600">
+                      Page <span className="font-medium">{pageClamped}</span> of <span className="font-medium">{totalPages}</span> • Showing{' '}
+                      <span className="font-medium">
+                        {Math.min(filteredHistory.length, start + 1)}–{Math.min(filteredHistory.length, start + currentHistory.length)}
+                      </span>{' '}
+                      of <span className="font-medium">{filteredHistory.length}</span>
                     </div>
-                  ))}
-                </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        disabled={pageClamped === 1}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                        Prev
+                      </button>
+                      <button
+                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                        disabled={pageClamped === totalPages}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        Next
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           </div>
